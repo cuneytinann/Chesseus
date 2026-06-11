@@ -177,12 +177,12 @@ body.lang-tr .lang-en { display: none; }
 .play-overlay {
   display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.75); z-index: 9999;
-  align-items: center; justify-content: center; padding: 20px;
+  align-items: center; justify-content: center; padding: 12px;
 }
 .play-overlay.show { display: flex; }
 .play-frame-wrap {
   background: var(--hub-paper); border: 2px solid var(--hub-ink);
-  border-radius: 4px; max-width: 700px; width: 100%; max-height: 90vh;
+  border-radius: 4px; max-width: 1100px; width: 100%; height: 95vh; max-height: 95vh;
   display: flex; flex-direction: column;
 }
 .play-frame-bar {
@@ -213,7 +213,7 @@ body.lang-tr .lang-en { display: none; }
 .btn-packed[disabled]:hover {
   background: #c0392b !important;
 }
-.play-frame { flex: 1; width: 100%; border: none; min-height: 400px; }
+.play-frame { flex: 1; width: 100%; border: none; min-height: 600px; }
 
 #btnPlay {
   background: var(--hub-accent) !important;
@@ -4803,7 +4803,6 @@ function hubActivate(tab) {
 }
 
 function hubClosePlay() {
-  
   document.getElementById('playOverlay').classList.remove('show');
   document.getElementById('playFrame').srcdoc = '';
 }
@@ -4811,25 +4810,9 @@ function hubClosePlay() {
 function hubPlay(htmlContent, fname) {
   
   
-  try {
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank', 'noopener,noreferrer');
-    
-    
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    if (!win) {
-      
-      alert(document.body.classList.contains('lang-en')
-        ? 'Popup blocked — please allow popups for this site to play.'
-        : 'Yeni sekme engellendi — oynamak için bu sitede pop-up izni verin.');
-    }
-  } catch (e) {
-    
-    document.getElementById('playFname').textContent = fname;
-    document.getElementById('playFrame').srcdoc = htmlContent;
-    document.getElementById('playOverlay').classList.add('show');
-  }
+  document.getElementById('playFname').textContent = fname;
+  document.getElementById('playFrame').srcdoc = htmlContent;
+  document.getElementById('playOverlay').classList.add('show');
 }
 
 document.querySelectorAll('.hub-tab').forEach(b => b.addEventListener('click', () => hubActivate(b.dataset.tab)));
