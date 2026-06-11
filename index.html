@@ -4082,6 +4082,7 @@ function buildStartState() {
 
 function encodeBoardLiteral(arr) {
   
+  
   const segments = [];
   let i = 0;
   while (i < 64) {
@@ -4098,6 +4099,7 @@ function encodeBoardLiteral(arr) {
     }
   }
   
+  
   const parts = [];
   let openStr = '';
   for (const seg of segments) {
@@ -4105,12 +4107,13 @@ function encodeBoardLiteral(arr) {
       openStr += seg.text;
     } else {
       
+      
       if (seg.len > 13) {
         parts.push("'" + openStr + "'");
         parts.push('_.repeat(' + seg.len + ')');
         openStr = '';
       } else {
-        openStr += '_'.repeat(seg.len);
+        openStr += '-'.repeat(seg.len);
       }
     }
   }
@@ -4800,14 +4803,33 @@ function hubActivate(tab) {
 }
 
 function hubClosePlay() {
+  
   document.getElementById('playOverlay').classList.remove('show');
   document.getElementById('playFrame').srcdoc = '';
 }
 
 function hubPlay(htmlContent, fname) {
-  document.getElementById('playFname').textContent = fname;
-  document.getElementById('playFrame').srcdoc = htmlContent;
-  document.getElementById('playOverlay').classList.add('show');
+  
+  
+  try {
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    
+    
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    if (!win) {
+      
+      alert(document.body.classList.contains('lang-en')
+        ? 'Popup blocked — please allow popups for this site to play.'
+        : 'Yeni sekme engellendi — oynamak için bu sitede pop-up izni verin.');
+    }
+  } catch (e) {
+    
+    document.getElementById('playFname').textContent = fname;
+    document.getElementById('playFrame').srcdoc = htmlContent;
+    document.getElementById('playOverlay').classList.add('show');
+  }
 }
 
 document.querySelectorAll('.hub-tab').forEach(b => b.addEventListener('click', () => hubActivate(b.dataset.tab)));
