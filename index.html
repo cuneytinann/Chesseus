@@ -2221,22 +2221,18 @@ select[data-orig-lang-id] { display: none !important; }
     <span class="lang-en">Interface:</span>
     <span class="lang-tr">Arayüz:</span>
   </strong>
-  <label style="display:flex;align-items:center;gap:14px;margin:6px 0;flex-wrap:wrap">
-    <span style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+  <div style="display:flex;align-items:center;gap:14px;margin:6px 0;flex-wrap:wrap">
+    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
       <input type="radio" name="optRender" value="prompt">
-      <span class="lang-en">Prompt</span>
-      <span class="lang-tr">Prompt</span>
-    </span>
-    <span style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+      <span class="lang-en">Prompt (browser dialog)</span>
+      <span class="lang-tr">Prompt (tarayıcı diyalogu)</span>
+    </label>
+    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
       <input type="radio" name="optRender" value="dom" checked>
-      <span class="lang-en">DOM</span>
-      <span class="lang-tr">DOM</span>
-    </span>
-    <span style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
-      <span class="lang-en">Prompt = browser dialog · DOM = visual board</span>
-      <span class="lang-tr">Prompt = tarayıcı diyaloğu · DOM = görsel tahta</span>
-    </span>
-  </label>
+      <span class="lang-en">DOM (clickable board)</span>
+      <span class="lang-tr">DOM (tıklamalı tahta)</span>
+    </label>
+  </div>
   <hr>
   <strong>
     <span class="lang-en">Display:</span>
