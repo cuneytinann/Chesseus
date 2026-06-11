@@ -202,6 +202,17 @@ body.lang-tr .lang-en { display: none; }
 .time-opts.disabled { opacity: 0.4; pointer-events: none; }
 .btn-packed { background: #c0392b; color: #fff; border-color: #a93226; }
 .btn-packed:hover { background: #a93226; }
+.btn-packed:disabled,
+.btn-packed[disabled] {
+  background: #c0392b !important;
+  border-color: #a93226;
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-packed:disabled:hover,
+.btn-packed[disabled]:hover {
+  background: #c0392b !important;
+}
 .play-frame { flex: 1; width: 100%; border: none; min-height: 400px; }
 
 #btnPlay {
@@ -2151,8 +2162,8 @@ select[data-orig-lang-id] { display: none !important; }
   </select>
 </div>
 <p><small>
-  <span class="lang-en">Pick a level — each one is a full bundle, not a feature combo. L1 is the most primitive, L4 is full FIDE.</span>
-  <span class="lang-tr">Bir seviye seç — her biri bağımsız bir paket, ayrı özellik kombinasyonu değil. L1 en ilkel, L4 tam FIDE.</span>
+  <span class="lang-en">Pick a level — each one is a full bundle, not a feature combo. L1 is the most primitive, L5 is full FIDE.</span>
+  <span class="lang-tr">Bir seviye seç — her biri bağımsız bir paket, ayrı özellik kombinasyonu değil. L1 en ilkel, L5 tam FIDE.</span>
 </small></p>
 
 <div class="opts">
@@ -2185,14 +2196,10 @@ select[data-orig-lang-id] { display: none !important; }
     <span class="lang-tr">L3 + üçlü tekrar + ölü pozisyon (FIDE kuralları, insan etkileşimi yok)</span>
   </label>
   <label>
-    <input type="radio" name="optLevel" value="L5">
+    <input type="radio" name="optLevel" value="L5" checked>
     <strong>L5</strong> —
     <span class="lang-en">L4 + resign + draw offer + 50/3R claim + 75/5R auto-draw (full FIDE)</span>
     <span class="lang-tr">L4 + terk + beraberlik teklifi + 50/3R iddia + 75/5R otomatik berabere (tam FIDE)</span>
-  </label>
-  <label>
-    <input type="radio" name="optLevel" value="L6" checked>
-    <strong>FideLite (Tüm Satranç)</strong>
   </label>
   <div id="timeOpts" class="time-opts">
     <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
@@ -2213,6 +2220,27 @@ select[data-orig-lang-id] { display: none !important; }
   <strong>
     <span class="lang-en">Interface:</span>
     <span class="lang-tr">Arayüz:</span>
+  </strong>
+  <label style="display:flex;align-items:center;gap:14px;margin:6px 0;flex-wrap:wrap">
+    <span style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="radio" name="optRender" value="prompt">
+      <span class="lang-en">Prompt</span>
+      <span class="lang-tr">Prompt</span>
+    </span>
+    <span style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="radio" name="optRender" value="dom" checked>
+      <span class="lang-en">DOM</span>
+      <span class="lang-tr">DOM</span>
+    </span>
+    <span style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
+      <span class="lang-en">Prompt = browser dialog · DOM = visual board</span>
+      <span class="lang-tr">Prompt = tarayıcı diyaloğu · DOM = görsel tahta</span>
+    </span>
+  </label>
+  <hr>
+  <strong>
+    <span class="lang-en">Display:</span>
+    <span class="lang-tr">Görünüm:</span>
   </strong>
   <label style="display:flex;align-items:center;gap:10px;margin:4px 0;flex-wrap:wrap">
     <span style="min-width:140px">
@@ -2323,7 +2351,7 @@ select[data-orig-lang-id] { display: none !important; }
     <span class="lang-en">Copy to clipboard</span>
     <span class="lang-tr">Panoya kopyala</span>
   </button>
-  <button id="btnDownloadPacked" class="btn-packed">
+  <button id="btnDownloadPacked" class="btn-packed" disabled title="Disabled — RegPack pipeline retired">
     <span class="lang-en">Download packed</span>
     <span class="lang-tr">Sıkıştırılmış indir</span>
   </button>
@@ -3769,12 +3797,24 @@ function getLevel() {
   return el ? el.value : 'L5';
 }
 
+function getRender() {
+  
+  const el = document.querySelector('input[name="optRender"]:checked');
+  return el ? el.value : 'dom';
+}
+
 function isSpecialLevel(level) {
   return false;
 }
 
 function hasClock(level) {
-  return level === 'L3' || level === 'L4' || level === 'L5' || level === 'L6';
+  
+  return level === 'L3' || level === 'L4' || level === 'L5';
+}
+
+function showClockUI(level) {
+  
+  return true;
 }
 
 function getUI() {
@@ -3784,67 +3824,48 @@ function getUI() {
   };
 }
 
-function getL6BaseName() {
-  const ui = getUI();
-  let incActive = false;
-  if (ui.incEnabled) {
-    const { inc } = readTimeOpts();
-    if (inc > 0) incActive = true;
-  }
-  const displayEl = document.getElementById('optDisplay');
-  const isBlindfold = displayEl && displayEl.value === 'blindfold';
-  if (isBlindfold) return 'FideLite_Blindfold' + (incActive ? '' : '_noinc');
-  const showOn = !!ui.show;
-  if (showOn && incActive)   return 'FideLite';
-  if (showOn && !incActive)  return 'FideLite_noinc';
-  if (!showOn && !incActive) return 'FideLite_noshow_noinc';
-  return 'FideLite_noshow';
-}
-
 function getVariantFile() {
   const level = getLevel();
-  if (level === 'L6') return getL6BaseName();
-
+  const render = getRender();
   const ui = getUI();
-  let incTag = '';
-  if (hasClock(level) && ui.incEnabled) {
-    const { inc } = readTimeOpts();
-    if (inc > 0) incTag = '_inc';
-  }
 
-  const showTag = (level === 'L5') ? '_S' : '_A';
+  
+  
+  
+  
+  
+  let showTag;
+  if (level === 'L5') {
+    showTag = (render === 'dom') ? '_A' : '_S';
+  } else {
+    showTag = '_A';
+  }
   let suffix = '';
   if (ui.show) suffix += showTag;
-  suffix += incTag;
 
-  return level + suffix;
+  const prefix = (render === 'dom') ? 'DOM_' : '';
+  return prefix + level + suffix;
 }
 
 function extrasLockedFor(level) {
-  if (isSpecialLevel(level)) return true;
-  if (level === 'L5' || level === 'L6') return true;
+  
+  
   return false;
 }
 
 function getName() {
   const level = getLevel();
+  const render = getRender();
   const ui = getUI();
-  const locked = extrasLockedFor(level);
 
-  if (level === 'L6') {
-    const base = getL6BaseName();
-    const opts = readTimeOpts();
-    const incActive = ui.incEnabled && opts.inc > 0;
-    let extra = '';
-    if (incActive) {
-      if (opts.base !== 600 || opts.inc !== 5) extra = '_' + opts.base + '+' + opts.inc;
-    } else {
-      if (opts.base !== 900) extra = '_' + opts.base;
-    }
-    return base + extra;
+  const prefix = (render === 'dom') ? 'DOM_' : '';
+  
+  let showTag;
+  if (level === 'L5') {
+    showTag = (render === 'dom') ? '_A' : '_S';
+  } else {
+    showTag = '_A';
   }
-
-  const showTag = (level === 'L5') ? '_S' : '_A';
 
   let suffix = '';
   if (ui.show) suffix += showTag;
@@ -3857,7 +3878,7 @@ function getName() {
     incVal = opts.inc;
     incActive = ui.incEnabled && incVal > 0;
     if (incActive) {
-      suffix += '_inc';
+      
       
       if (baseVal !== 600 || incVal !== 5) {
         suffix += '_' + baseVal + '+' + incVal;
@@ -3871,23 +3892,23 @@ function getName() {
   }
 
   const fenState = window.__fenState;
-  const fenCustom = !locked && !!(fenState && fenState.ok && !fenState.isStart);
+  const fenCustom = !!(fenState && fenState.ok && !fenState.isStart);
   const clock = hasClock(level);
-  const uneqActive = !locked && clock && (() => {
+  const uneqActive = clock && (() => {
     const opts = readTimeOpts();
     return opts.uneqActive;
   })();
   const halfmoveInputEl = document.getElementById('optHalfmove');
-  const halfmoveInput = (!locked && clock && halfmoveInputEl)
+  const halfmoveInput = (clock && halfmoveInputEl)
     ? Math.max(0, Math.min(99, parseInt(halfmoveInputEl.value, 10) || 0))
     : 0;
   const repCountEl = document.getElementById('optRepCount');
-  const repCount = (!locked && level === 'L4' && repCountEl)
+  const repCount = (level === 'L4' && repCountEl)
     ? Math.max(0, Math.min(2, parseInt(repCountEl.value, 10) || 0))
     : 0;
   if (fenCustom || uneqActive || halfmoveInput > 0 || repCount > 0) suffix += '_fen';
 
-  return level + suffix;
+  return prefix + level + suffix;
 }
 
 function fenMsg(s) {
@@ -4111,66 +4132,118 @@ function encodeBoardLiteral(arr) {
 }
 
 function rewriteHalfmoveChain(html, n, layout) {
-  if (layout === 'pipeline-main') {
-    
-    if (n === 0) {
-      return html.replace(/((?:,|^)n=(?:[A-Za-z]\w*=)+)\d+(?=,)/, (_m, prefix) => prefix + '0');
-    }
-    return html.replace(
-      /(,|^)n=((?:[A-Za-z]\w*=)+)\d+(?=,)/,
-      (_m, leading, suffix) => {
-        const names = suffix.slice(0, -1).split('=');
-        const zeros = names.map(name => name + '=0').join(',');
-        return leading + 'n=' + n + ',' + zeros;
-      }
-    );
-  }
   
-  const ws = (layout === 'pipeline-special') ? '\\s*' : '';
-  const leadRe  = new RegExp('((?:,' + ws + '|^)[A-Za-z]\\w*=)+c=\\d+(?=' + ws + ',)');
-  if (n === 0) {
-    return html.replace(leadRe, (_m, prefix) => prefix + 'c=0');
+  
+  
+  
+  
+  
+  
+  const chainRe = /(,|^)((?:[A-Za-z_]\w*=)+)(\d+)(?=,)/g;
+  let result = '';
+  let lastEnd = 0;
+  let match;
+  chainRe.lastIndex = 0;
+  while ((match = chainRe.exec(html)) !== null) {
+    const [whole, leading, vars, num] = match;
+    const start = match.index;
+    
+    const names = vars.slice(0, -1).split('=');
+    if (!names.includes('n')) continue;
+    if (names.length === 1) {
+      
+      const replaced = leading + 'n=' + n;
+      result += html.slice(lastEnd, start) + replaced;
+      lastEnd = start + whole.length;
+    } else {
+      
+      const others = names.filter(name => name !== 'n');
+      const otherChain = others.map(name => name + '=').join('') + num;
+      const replaced = leading + otherChain + ',n=' + n;
+      result += html.slice(lastEnd, start) + replaced;
+      lastEnd = start + whole.length;
+    }
+    
+    break;
   }
-  const splitRe = new RegExp('(,' + ws + '|^)((?:[A-Za-z]\\w*=)+)c=\\d+(?=' + ws + ',)');
-  return html.replace(splitRe, (_m, leading, chainPrefix) => {
-    const names = chainPrefix.slice(0, -1).split('=');
-    const zeros = names.map(name => name + '=0').join(',');
-    return leading + zeros + ',c=' + n;
-  });
+  if (lastEnd === 0) {
+    
+    return html;
+  }
+  return result + html.slice(lastEnd);
 }
 
 function injectFenIntoSourceNormal(html, state, repCount, level) {
   const boardLit = encodeBoardLiteral(state.s);
-  
-  const hasEO = (level === 'L2' || level === 'L3' || level === 'L4');
-  const hasN  = (level === 'L3' || level === 'L4');
-  const hasP  = (level === 'L4');
 
+  
+  const hasEO = (level === 'L2' || level === 'L3' || level === 'L4' || level === 'L5');
+  const hasN  = (level === 'L3' || level === 'L4' || level === 'L5');
+  const hasP  = (level === 'L4' || level === 'L5');
+
+  
+  
+  
+  function patchInit(re, transform) {
+    
+    const scriptMatch = html.match(/<script>([\s\S]*?);/);
+    if (!scriptMatch) return;
+    const initBlock = scriptMatch[0];   
+    const initStart = scriptMatch.index;
+    const initEnd   = initStart + initBlock.length;
+    const head = html.slice(0, initStart);
+    const tail = html.slice(initEnd);
+    const patchedInit = initBlock.replace(re, transform);
+    html = head + patchedInit + tail;
+  }
+
+  
   html = html.replace(/s=\[\.\.\.[^\]]+\]/, "s=[..." + boardLit + "]");
 
-  html = html.replace(/(,|^)t=\d(?=,)/, (_m, p1) => p1 + 't=' + state.t);
+  
+  
+  patchInit(/(,|^)t=(!\d|\d)(?=,)/, (_m, p1, cur) => {
+    const isBangForm = cur.charAt(0) === '!';
+    const next = isBangForm
+      ? (state.t ? '!0' : '!1')
+      : (state.t ? '1' : '0');
+    return p1 + 't=' + next;
+  });
 
   if (hasEO) {
-    html = html.replace(/(,|^)y=(?:-?\d+|_)(?=,)/, (_m, p1) => p1 + 'y=' + state.e);
+    
+    patchInit(/(,|^)e=(?:-?\d+|_)(?=,)/, (_m, p1) => {
+      const eVal = (state.e === -1 || state.e === '_' || state.e == null) ? '_' : state.e;
+      return p1 + 'e=' + eVal;
+    });
   }
 
   if (hasEO) {
-    html = html.replace(/(,|^)o=\d+(?=,)/, (_m, p1) => p1 + 'o=' + state.o);
+    patchInit(/(,|^)o=\d+(?=,)/, (_m, p1) => p1 + 'o=' + state.o);
   }
 
   if (hasN) {
-    const before = html;
-    html = html.replace(/(,|^)c=\d+(?=,)/, (_m, p1) => p1 + 'c=' + state.n);
-    if (html === before) {
-      html = rewriteHalfmoveChain(html, state.n, 'normal');
+    
+    const beforeNPatch = html;
+    patchInit(/(,|^)n=\d+(?=,)/, (_m, p1) => p1 + 'n=' + state.n);
+    if (html === beforeNPatch) {
+      
+      const scriptMatch = html.match(/<script>([\s\S]*?);/);
+      if (scriptMatch) {
+        const initBlock = scriptMatch[0];
+        const initStart = scriptMatch.index;
+        const head = html.slice(0, initStart);
+        const tail = html.slice(initStart + initBlock.length);
+        html = head + rewriteHalfmoveChain(initBlock, state.n, 'pipeline-main') + tail;
+      }
     }
   }
 
   if (hasP && repCount > 0) {
-    const turnBool = Boolean(state.t);
-    const hashKey = state.s.join('') + [turnBool, state.e, state.o].join(',');
-    const literal = JSON.stringify(hashKey) + ':' + repCount;
-    html = html.replace(/(,|^)P=\{\}(?=,)/, (_m, p1) => p1 + 'P={' + literal + '}');
+    
+    patchInit(/(,|^)P=\{\[s\+\[t,e,o\]\]:1\}(?=,)/, (_m, p1) => {
+      return p1 + 'P={[s+[t,e,o]]:' + (repCount + 1) + '}';
+    });
   }
 
   return html;
@@ -4266,14 +4339,19 @@ let lastSaf = '', lastPacked = '';
 function syncShowDropdownLabels() {
   const lang = document.body.classList.contains('lang-tr') ? 'tr' : 'en';
   const lv = getLevel();
-  const isL5 = (lv === 'L5' || lv === 'L6');
+  const render = (function() {
+    const el = document.querySelector('input[name="optRender"]:checked');
+    return el ? el.value : 'dom';
+  })();
+  
+  const isCounter = (lv === 'L5' && render === 'prompt');
   
   const labelEn = document.getElementById('optShowLabelEn');
   const labelTr = document.getElementById('optShowLabelTr');
-  if (labelEn) labelEn.textContent = isL5 ? 'Counters & status indicators' : 'End-of-game notice';
-  if (labelTr) labelTr.textContent = isL5 ? 'Sayaç ve durum göstergeleri'    : 'Oyun-sonu bildirimi';
+  if (labelEn) labelEn.textContent = isCounter ? 'Counters & status indicators' : 'End-of-game notice';
+  if (labelTr) labelTr.textContent = isCounter ? 'Sayaç ve durum göstergeleri'    : 'Oyun-sonu bildirimi';
   
-  const optAttr = isL5 ? ('data-' + lang + '-l5') : ('data-' + lang);
+  const optAttr = isCounter ? ('data-' + lang + '-l5') : ('data-' + lang);
   const sel = document.getElementById('optShow');
   if (sel) {
     sel.querySelectorAll('option').forEach(o => {
@@ -4285,58 +4363,53 @@ function syncShowDropdownLabels() {
 
 function generate() {
   const level = getLevel();
-  const isSpecial = isSpecialLevel(level);              
-  const clockOn = hasClock(level);
-  
-  const isL5 = (level === 'L5');
-  
-  const extrasLocked = isSpecial || isL5;
+  const render = getRender();
+  const clockOn = hasClock(level);    
+  const clockUI = showClockUI(level); 
 
   syncShowDropdownLabels();
 
+  
+  
   const displayRow = document.getElementById('displayModeRow');
-  if (displayRow) displayRow.style.display = (level === 'L6') ? 'flex' : 'none';
+  if (displayRow) displayRow.style.display = 'none';
 
-  if (extrasLocked) {
-    const repCountReset = document.getElementById('optRepCount');
-    if (repCountReset && repCountReset.value !== '0') repCountReset.value = '0';
-    const halfmoveReset = document.getElementById('optHalfmove');
-    if (halfmoveReset && halfmoveReset.value !== '0') halfmoveReset.value = '0';
-    const fenReset = document.getElementById('optFen');
-    if (fenReset && fenReset.value) fenReset.value = '';
-    const uneqReset = document.getElementById('optUneqEnable');
-    if (uneqReset && uneqReset.checked) uneqReset.checked = false;
-  }
-
+  
+  
   const showSelLock = document.getElementById('optShow');
-  if (showSelLock) showSelLock.disabled = isSpecial;
+  if (showSelLock) showSelLock.disabled = false;
   const incToggleLock = document.getElementById('optIncEnable');
-  if (incToggleLock) incToggleLock.disabled = isSpecial;
+  if (incToggleLock) incToggleLock.disabled = !clockOn;
   const optBaseLock = document.getElementById('optBase');
-  if (optBaseLock) optBaseLock.disabled = isSpecial;
+  if (optBaseLock) optBaseLock.disabled = !clockOn;
   const optIncLock = document.getElementById('optInc');
-  if (optIncLock) optIncLock.disabled = isSpecial;
+  if (optIncLock) optIncLock.disabled = !clockOn;
   const optFenLock = document.getElementById('optFen');
   if (optFenLock) {
-    optFenLock.disabled = extrasLocked;
-    optFenLock.style.opacity = extrasLocked ? '0.45' : '';
+    optFenLock.disabled = false;
+    optFenLock.style.opacity = '';
   }
 
+  
+  
   const timeOpts = document.getElementById('timeOpts');
   if (timeOpts) {
     timeOpts.classList.toggle('disabled', !clockOn);
-    timeOpts.style.display = clockOn ? '' : 'none';
-    
-    timeOpts.style.opacity = isSpecial ? '0.55' : '';
+    timeOpts.style.display = clockUI ? 'flex' : 'none';
+    timeOpts.style.opacity = '';
   }
+  
   
   const uneqEl     = document.getElementById('optUneqEnable');
   const uneqRow    = document.getElementById('uneqRow');
   const uneqFields = document.getElementById('optUneqFields');
-  const uneqAllowed = clockOn && !extrasLocked;
+  const uneqAllowed = clockOn;
   if (uneqEl)  uneqEl.disabled = !uneqAllowed;
-  if (uneqRow) uneqRow.style.opacity = uneqAllowed ? '1' : '0.45';
-  if (uneqRow) uneqRow.style.cursor  = uneqAllowed ? '' : 'not-allowed';
+  if (uneqRow) {
+    uneqRow.style.display = clockUI ? 'flex' : 'none';
+    uneqRow.style.opacity = uneqAllowed ? '1' : '0.45';
+    uneqRow.style.cursor  = uneqAllowed ? '' : 'not-allowed';
+  }
   if (!uneqAllowed && uneqEl && uneqEl.checked) uneqEl.checked = false;
   const uneqChecked = !!(uneqEl && uneqEl.checked);
   if (uneqFields) uneqFields.style.display = (uneqAllowed && uneqChecked) ? 'flex' : 'none';
@@ -4348,17 +4421,20 @@ function generate() {
   const repCountRow = document.getElementById('repCountRow');
   const repCountEl  = document.getElementById('optRepCount');
   if (repCountRow) {
-    const repActive = (level === 'L4') && !extrasLocked;
+    const repActive = (level === 'L4');
     repCountRow.style.display = repActive ? '' : 'none';
     if (repCountEl && !repActive) repCountEl.value = '0';
   }
 
   const halfmoveRow = document.getElementById('halfmoveRow');
   const halfmoveEl  = document.getElementById('optHalfmove');
-  const halfmoveAllowed = clockOn && !extrasLocked;
+  const halfmoveAllowed = clockOn;
   if (halfmoveEl)  halfmoveEl.disabled = !halfmoveAllowed;
-  if (halfmoveRow) halfmoveRow.style.opacity = halfmoveAllowed ? '1' : '0.45';
-  if (halfmoveRow) halfmoveRow.style.cursor  = halfmoveAllowed ? '' : 'not-allowed';
+  if (halfmoveRow) {
+    halfmoveRow.style.display = clockUI ? 'flex' : 'none';
+    halfmoveRow.style.opacity = halfmoveAllowed ? '1' : '0.45';
+    halfmoveRow.style.cursor  = halfmoveAllowed ? '' : 'not-allowed';
+  }
   if (!halfmoveAllowed && halfmoveEl && halfmoveEl.value !== '0') halfmoveEl.value = '0';
 
   const fenStr = (document.getElementById('optFen').value || '').trim();
@@ -4409,11 +4485,9 @@ function generate() {
   }
 
   const ui2 = getUI();
-  const variantBase = getVariantFile();                            
-  const normalFile  = variantBase + '.html';                       
-  const pipelineFile  = variantBase + '_regopt.html';                
-  const packedFile  = variantBase + '_regopt_packed.html';         
-  const displayName = getName() + '.html';                         
+  const variantBase = getVariantFile();
+  const normalFile  = variantBase + '.html';
+  const displayName = getName() + '.html';
   const safEl = document.getElementById('output');
   const fnameEl = document.getElementById('fname');
   const bytesEl = document.getElementById('bytes');
@@ -4424,20 +4498,7 @@ function generate() {
     : 0;
   const fenStateLocal = fenState;
 
-  const defaultTime = (() => {
-    if (!clockOn) return true;
-    const opts = readTimeOpts();
-    const incActiveOpt = ui2.incEnabled && opts.inc > 0;
-    if (incActiveOpt) return opts.base === 600 && opts.inc === 5 && !opts.uneqActive;
-    return opts.base === 900 && !opts.uneqActive;
-  })();
-  const noCustomization =
-    defaultTime &&
-    (!fenStateLocal || fenStateLocal.isStart) &&
-    halfmoveInput === 0 &&
-    repCount === 0;
-
-  function injectTimePipeline(html) {
+  function injectTimeNormal(html) {
     if (!clockOn) return html;
     const { base, inc, baseW, baseB, uneqActive } = readTimeOpts();
     const incActive = ui2.incEnabled && inc > 0;
@@ -4451,21 +4512,6 @@ function generate() {
         /([tW])\?u\+=\d+:([nv])\+=\d+/,
         (_m, turn, second) => turn + '?u+=' + shortNum(inc) + ':' + second + '+=' + shortNum(inc)
       );
-    }
-    return html;
-  }
-
-  function injectTimeNormal(html) {
-    if (!clockOn) return html;
-    const { base, inc, baseW, baseB, uneqActive } = readTimeOpts();
-    const incActive = ui2.incEnabled && inc > 0;
-    html = html.replace(/u=n=(?:\d+e\d+|\d+)/, () => {
-      return uneqActive
-        ? ('u=' + shortNum(baseW) + ',n=' + shortNum(baseB))
-        : ('u=n=' + shortNum(base));
-    });
-    if (incActive) {
-      html = html.replace(/t\?u\+=\d+:n\+=\d+/, 't?u+=' + shortNum(inc) + ':n+=' + shortNum(inc));
     }
     return html;
   }
@@ -4487,26 +4533,11 @@ function generate() {
       () => ({ ok: false, path, status: 0, text: '' })   
     );
   }
-  const fetches = [
-    fetchText('versions/'        + normalFile),
-    fetchText('versions/pipeline/' + pipelineFile),
-  ];
-  if (noCustomization) {
-    fetches.push(fetchText('versions/pipeline/reg/' + packedFile));
-  }
 
-  Promise.all(fetches).then(parts => {
-    const normalRes = parts[0];
-    const pipelineRes = parts[1];
-    const packedRes = noCustomization ? parts[2] : null;
+  fetchText('versions/' + normalFile).then(normalRes => {
     const normalSrc = (normalRes.text || '').trim();
-    const pipelineSrc = (pipelineRes.text || '').trim();
-    const packedSrc = (packedRes && packedRes.text || '').trim();
-
     const missing = [];
     if (!normalSrc) missing.push({ kind: 'normal', path: 'versions/' + normalFile });
-    if (!pipelineSrc) missing.push({ kind: 'pipeline', path: 'versions/pipeline/' + pipelineFile });
-    if (noCustomization && !packedSrc) missing.push({ kind: 'packed', path: 'versions/pipeline/reg/' + packedFile });
 
     let normalHtml = injectTimeNormal(normalSrc);
     const stateForInject = effectiveInjectState();
@@ -4514,55 +4545,13 @@ function generate() {
       normalHtml = injectFenIntoSourceNormal(normalHtml, stateForInject, repCount, level);
     }
 
-    let pipelineHtml = injectTimePipeline(pipelineSrc);
-    if (stateForInject) {
-      pipelineHtml = injectFenIntoSourcePipeline(pipelineHtml, stateForInject, repCount, level);
-    }
-
     lastSaf = normalHtml;
     safEl.textContent = normalHtml;
     fnameEl.textContent = displayName;
     bytesEl.textContent = normalHtml.length + ' byte';
 
-    if (noCustomization && packedSrc) {
-      lastPacked = packedSrc;
-      const en = document.body.classList.contains('lang-en');
-      const label = en ? ' (RegPack-compressed ' : ' (RegPack ile sıkıştırılmış ';
-      const unit = en ? ' bytes)' : ' byte)';
-      bytesEl.textContent = normalHtml.length + ' byte' + label + lastPacked.length + unit;
-    } else if (pipelineSrc) {
-      
-      const scriptBody = (pipelineHtml.match(/<script>([\s\S]*)<\/script>/) || [,''])[1];
-      const r = regpackVia(scriptBody);
-      if (r) {
-        lastPacked = '<scr' + 'ipt>' + r.packed + '</scr' + 'ipt>';
-        const en = document.body.classList.contains('lang-en');
-        const label = en ? ' (RegPack-compressed ' : ' (RegPack ile sıkıştırılmış ';
-        const unit = en ? ' bytes)' : ' byte)';
-        bytesEl.textContent = normalHtml.length + ' byte' + label + lastPacked.length + unit;
-      } else {
-        lastPacked = '';
-        
-        if (!window.__regenPolling) {
-          let tries = 0;
-          window.__regenPolling = setInterval(() => {
-            const fr = document.getElementById('regpackFrame');
-            const fn = fr && fr.contentWindow && fr.contentWindow.regpackCompress;
-            if (typeof fn === 'function') {
-              clearInterval(window.__regenPolling);
-              window.__regenPolling = null;
-              generate();
-            } else if (++tries > 30) {
-              clearInterval(window.__regenPolling);
-              window.__regenPolling = null;
-            }
-          }, 100);
-        }
-      }
-    } else {
-      
-      lastPacked = '';
-    }
+    
+    lastPacked = '';
 
     updateMissingFileNotice(missing, normalSrc.length === 0);
   }).catch(() => {
@@ -4671,6 +4660,9 @@ document.getElementById('btnCopy').addEventListener('click', copyToClipboard);
 document.getElementById('btnDownloadPacked').addEventListener('click', downloadPacked);
 
 document.querySelectorAll('input[name="optLevel"]').forEach(el => {
+  el.addEventListener('change', generate);
+});
+document.querySelectorAll('input[name="optRender"]').forEach(el => {
   el.addEventListener('change', generate);
 });
 document.getElementById('optShow').addEventListener('change', generate);
