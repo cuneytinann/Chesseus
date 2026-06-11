@@ -3831,9 +3831,10 @@ function getVariantFile() {
 
   
   
+  
   let suffix = '';
-  if (level !== 'L5' && ui.show) {
-    suffix = '_A';
+  if ((level === 'L1' || level === 'L2') && !ui.show) {
+    suffix = '_noZ';
   }
 
   const prefix = (render === 'dom') ? 'DOM_' : '';
@@ -3855,8 +3856,8 @@ function getName() {
 
   
   let showSuffix = '';
-  if (level !== 'L5' && ui.show) {
-    showSuffix = '_A';
+  if ((level === 'L1' || level === 'L2') && !ui.show) {
+    showSuffix = '_noZ';
   }
 
   
@@ -4357,9 +4358,12 @@ function generate() {
   if (displayRow) displayRow.style.display = 'none';
 
   
-  const isL5 = (level === 'L5');
+  const showLocked = (level === 'L3' || level === 'L4' || level === 'L5');
   const showSelLock = document.getElementById('optShow');
-  if (showSelLock) showSelLock.disabled = isL5;
+  if (showSelLock) {
+    if (showLocked && showSelLock.value !== 'A') showSelLock.value = 'A';
+    showSelLock.disabled = showLocked;
+  }
   const incToggleLock = document.getElementById('optIncEnable');
   if (incToggleLock) incToggleLock.disabled = !clockOn;
   const optBaseLock = document.getElementById('optBase');
