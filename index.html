@@ -1246,7 +1246,7 @@ select[data-orig-lang-id] { display: none !important; }
     <button class="hub-tab" data-tab="manual"><span class="lang-en">Manual</span><span class="lang-tr">Kılavuz</span></button>
     <button class="hub-tab" data-tab="helper"><span class="lang-en">Test Helper</span><span class="lang-tr">Test Aracı</span></button>
     <button class="hub-tab" data-tab="generator"><span class="lang-en">Generator</span><span class="lang-tr">Üreteç</span></button>
-    <a class="hub-tab hub-tab-play" href="versions/pipeline/reg/FideLite_regopt_packed.html" target="_blank" rel="noopener noreferrer"><span class="lang-en">▶ Play</span><span class="lang-tr">▶ Oyna</span></a>
+    <a class="hub-tab hub-tab-play" href="versions/DOM_L5.html" target="_blank" rel="noopener noreferrer"><span class="lang-en">▶ Play</span><span class="lang-tr">▶ Oyna</span></a>
   </div>
   <div class="hub-lang">
     <select id="hubLang" onchange="hubSetLang(this.value)">
@@ -3831,17 +3831,10 @@ function getVariantFile() {
 
   
   
-  
-  
-  
-  let showTag;
-  if (level === 'L5') {
-    showTag = (render === 'dom') ? '_A' : '_S';
-  } else {
-    showTag = '_A';
-  }
   let suffix = '';
-  if (ui.show) suffix += showTag;
+  if (level !== 'L5' && ui.show) {
+    suffix = '_A';
+  }
 
   const prefix = (render === 'dom') ? 'DOM_' : '';
   return prefix + level + suffix;
@@ -3859,45 +3852,19 @@ function getName() {
   const ui = getUI();
 
   const prefix = (render === 'dom') ? 'DOM_' : '';
+
   
-  let showTag;
-  if (level === 'L5') {
-    showTag = (render === 'dom') ? '_A' : '_S';
-  } else {
-    showTag = '_A';
+  let showSuffix = '';
+  if (level !== 'L5' && ui.show) {
+    showSuffix = '_A';
   }
 
-  let suffix = '';
-  if (ui.show) suffix += showTag;
-
-  let incActive = false;
-  let baseVal = 900, incVal = 0;
-  if (hasClock(level)) {
-    const opts = readTimeOpts();
-    baseVal = opts.base;
-    incVal = opts.inc;
-    incActive = ui.incEnabled && incVal > 0;
-    if (incActive) {
-      
-      
-      if (baseVal !== 600 || incVal !== 5) {
-        suffix += '_' + baseVal + '+' + incVal;
-      }
-    } else {
-      
-      if (baseVal !== 900) {
-        suffix += '_' + baseVal;
-      }
-    }
-  }
-
+  
   const fenState = window.__fenState;
   const fenCustom = !!(fenState && fenState.ok && !fenState.isStart);
   const clock = hasClock(level);
-  const uneqActive = clock && (() => {
-    const opts = readTimeOpts();
-    return opts.uneqActive;
-  })();
+  const opts = clock ? readTimeOpts() : null;
+  const uneqActive = clock && opts && opts.uneqActive;
   const halfmoveInputEl = document.getElementById('optHalfmove');
   const halfmoveInput = (clock && halfmoveInputEl)
     ? Math.max(0, Math.min(99, parseInt(halfmoveInputEl.value, 10) || 0))
@@ -3906,9 +3873,29 @@ function getName() {
   const repCount = (level === 'L4' && repCountEl)
     ? Math.max(0, Math.min(2, parseInt(repCountEl.value, 10) || 0))
     : 0;
-  if (fenCustom || uneqActive || halfmoveInput > 0 || repCount > 0) suffix += '_fen';
+  const fenTag = (fenCustom || uneqActive || halfmoveInput > 0 || repCount > 0) ? '_FEN' : '';
 
-  return prefix + level + suffix;
+  
+  
+  let incTag = '';
+  let timeTag = '';
+  if (clock && opts) {
+    const incEffectivelyOff = !ui.incEnabled || opts.inc === 0;
+    if (incEffectivelyOff) {
+      incTag = '_noinc';
+      
+      if (opts.base !== 600) timeTag = '_' + opts.base;
+    } else {
+      
+      
+      
+      if (opts.base !== 600 || opts.inc !== 5) {
+        timeTag = '_' + opts.base + '+' + opts.inc;
+      }
+    }
+  }
+
+  return prefix + level + showSuffix + fenTag + incTag + timeTag;
 }
 
 function fenMsg(s) {
@@ -4338,24 +4325,16 @@ let lastSaf = '', lastPacked = '';
 
 function syncShowDropdownLabels() {
   const lang = document.body.classList.contains('lang-tr') ? 'tr' : 'en';
-  const lv = getLevel();
-  const render = (function() {
-    const el = document.querySelector('input[name="optRender"]:checked');
-    return el ? el.value : 'dom';
-  })();
-  
-  const isCounter = (lv === 'L5' && render === 'prompt');
   
   const labelEn = document.getElementById('optShowLabelEn');
   const labelTr = document.getElementById('optShowLabelTr');
-  if (labelEn) labelEn.textContent = isCounter ? 'Counters & status indicators' : 'End-of-game notice';
-  if (labelTr) labelTr.textContent = isCounter ? 'Sayaç ve durum göstergeleri'    : 'Oyun-sonu bildirimi';
+  if (labelEn) labelEn.textContent = 'End-of-game notice';
+  if (labelTr) labelTr.textContent = 'Oyun-sonu bildirimi';
   
-  const optAttr = isCounter ? ('data-' + lang + '-l5') : ('data-' + lang);
   const sel = document.getElementById('optShow');
   if (sel) {
     sel.querySelectorAll('option').forEach(o => {
-      const next = o.getAttribute(optAttr);
+      const next = o.getAttribute('data-' + lang);
       if (next != null) o.textContent = next;
     });
   }
@@ -4375,9 +4354,9 @@ function generate() {
   if (displayRow) displayRow.style.display = 'none';
 
   
-  
+  const isL5 = (level === 'L5');
   const showSelLock = document.getElementById('optShow');
-  if (showSelLock) showSelLock.disabled = false;
+  if (showSelLock) showSelLock.disabled = isL5;
   const incToggleLock = document.getElementById('optIncEnable');
   if (incToggleLock) incToggleLock.disabled = !clockOn;
   const optBaseLock = document.getElementById('optBase');
@@ -4502,16 +4481,23 @@ function generate() {
     if (!clockOn) return html;
     const { base, inc, baseW, baseB, uneqActive } = readTimeOpts();
     const incActive = ui2.incEnabled && inc > 0;
+    
+    
     html = html.replace(/u=([nv])=(?:\d+e\d+|\d+)/, (_m, secondVar) => {
       return uneqActive
         ? ('u=' + shortNum(baseW) + ',' + secondVar + '=' + shortNum(baseB))
         : ('u=' + secondVar + '=' + shortNum(base));
     });
     if (incActive) {
+      
       html = html.replace(
         /([tW])\?u\+=\d+:([nv])\+=\d+/,
         (_m, turn, second) => turn + '?u+=' + shortNum(inc) + ':' + second + '+=' + shortNum(inc)
       );
+    } else {
+      
+      
+      html = html.replace(/([,;])([tW])\?u\+=\d+:([nv])\+=\d+/, '');
     }
     return html;
   }
