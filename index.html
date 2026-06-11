@@ -1290,7 +1290,7 @@ select[data-orig-lang-id] { display: none !important; }
     <div class="intro-stat-label"><span class="lang-en">variants</span><span class="lang-tr">varyant</span></div>
   </div>
   <div>
-    <div class="intro-stat-num">853–<span class="js-packed-bytes">1682</span></div>
+    <div class="intro-stat-num"><span class="js-min-bytes">853</span>–<span class="js-max-bytes">1682</span></div>
     <div class="intro-stat-label"><span class="lang-en">byte range</span><span class="lang-tr">byte yelpazesi</span></div>
   </div>
 </div>
@@ -3896,7 +3896,7 @@ function getName() {
     }
   }
 
-  return prefix + level + showSuffix + fenTag + incTag + timeTag;
+  return prefix + level + showSuffix + fenTag + timeTag + incTag;
 }
 
 function fenMsg(s) {
@@ -4867,9 +4867,13 @@ fetch('versions/FideLite.html')
   })
   .catch(() => {});
 
-fetch('versions/pipeline/reg/FideLite_regopt_packed.html')
-  .then(r => r.ok ? r.text() : Promise.reject(r.status))
-  .then(html => fillBytes('js-packed-bytes', new Blob([html]).size))
+fetch('versions/sizes.json')
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(sizes => {
+    if (sizes && typeof sizes.hero === 'number') fillBytes('js-packed-bytes', sizes.hero);
+    if (sizes && typeof sizes.min  === 'number') fillBytes('js-min-bytes',    sizes.min);
+    if (sizes && typeof sizes.max  === 'number') fillBytes('js-max-bytes',    sizes.max);
+  })
   .catch(() => {});
 </script>
 
