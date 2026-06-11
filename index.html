@@ -1282,11 +1282,11 @@ select[data-orig-lang-id] { display: none !important; }
     <div class="intro-stat-label"><span class="lang-en">byte engine</span><span class="lang-tr">byte motor</span></div>
   </div>
   <div>
-    <div class="intro-stat-num">%95</div>
+    <div class="intro-stat-num">%100</div>
     <div class="intro-stat-label"><span class="lang-en">FIDE compliant</span><span class="lang-tr">FIDE uyumluluk</span></div>
   </div>
   <div>
-    <div class="intro-stat-num">12</div>
+    <div class="intro-stat-num js-variants">12</div>
     <div class="intro-stat-label"><span class="lang-en">variants</span><span class="lang-tr">varyant</span></div>
   </div>
   <div>
@@ -4870,9 +4870,10 @@ fetch('versions/FideLite.html')
 fetch('versions/sizes.json')
   .then(r => r.ok ? r.json() : Promise.reject(r.status))
   .then(sizes => {
-    if (sizes && typeof sizes.hero === 'number') fillBytes('js-packed-bytes', sizes.hero);
-    if (sizes && typeof sizes.min  === 'number') fillBytes('js-min-bytes',    sizes.min);
-    if (sizes && typeof sizes.max  === 'number') fillBytes('js-max-bytes',    sizes.max);
+    if (sizes && typeof sizes.hero     === 'number') fillBytes('js-packed-bytes', sizes.hero);
+    if (sizes && typeof sizes.min      === 'number') fillBytes('js-min-bytes',    sizes.min);
+    if (sizes && typeof sizes.max      === 'number') fillBytes('js-max-bytes',    sizes.max);
+    if (sizes && typeof sizes.variants === 'number') fillBytes('js-variants',     sizes.variants);
   })
   .catch(() => {});
 </script>

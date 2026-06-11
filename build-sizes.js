@@ -38,6 +38,16 @@ function walk(dir, out) {
 const all = [];
 walk(ROOT, all);
 
+// Variant count: only .html files directly inside versions/ (no subdirs).
+let variantCount = 0;
+for (const name of fs.readdirSync(ROOT)) {
+  const full = path.join(ROOT, name);
+  const stat = fs.statSync(full);
+  if (stat.isFile() && name.toLowerCase().endsWith('.html')) {
+    variantCount++;
+  }
+}
+
 // Split: hero (anything under example/) vs range (everything else).
 const heroFiles  = [];
 const rangeFiles = [];
@@ -72,6 +82,7 @@ const out = {
   min:      min.size,
   max:      max.size,
   hero:     hero.size,
+  variants: variantCount,
   minFile:  path.relative(ROOT, min.path),
   maxFile:  path.relative(ROOT, max.path),
   heroFile: path.relative(ROOT, hero.path),
@@ -84,4 +95,5 @@ console.log('Wrote ' + path.relative(__dirname, OUT));
 console.log('  hero: ' + hero.size + ' B  (' + out.heroFile + ')');
 console.log('  min : ' + min.size  + ' B  (' + out.minFile  + ')');
 console.log('  max : ' + max.size  + ' B  (' + out.maxFile  + ')');
+console.log('  variants (top-level): ' + variantCount);
 console.log('  files scanned (range): ' + rangeFiles.length);

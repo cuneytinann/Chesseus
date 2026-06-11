@@ -2,9 +2,10 @@
   "min": 1085,
   "max": 3061,
   "hero": 2401,
+  "variants": 14,
   "minFile": "L1_noZ.html",
   "maxFile": "DOM_L5.html",
   "heroFile": "example\\FideLite.html",
   "count": 14,
-  "generated": "2026-06-11T23:12:11.406Z"
+  "generated": "2026-06-11T23:20:55.078Z"
 }
