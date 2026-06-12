@@ -1,11 +1,11 @@
 {
   "min": 1085,
-  "max": 3081,
+  "max": 3080,
   "hero": 2401,
   "variants": 14,
   "minFile": "L1_noZ.html",
   "maxFile": "DOM_L5.html",
   "heroFile": "example\\FideLite.html",
   "count": 14,
-  "generated": "2026-06-12T05:45:54.911Z"
+  "generated": "2026-06-12T05:48:37.396Z"
 }
