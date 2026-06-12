@@ -3828,11 +3828,14 @@ function renderNotation() {
     const extraClass = (h.isPromo ? ' promo' : '') +
                        (h.isResign ? ' resign' : '') +
                        (h.isDrawClaim ? ' drawclaim' : '');
+    
+    
+    const displayMove = h.isResign ? 'r' : h.move;
     rows.push(
       '<div class="move-row' + extraClass + sideClass + '">' +
         '<span class="num">' + (i+1) + '</span>' +
-        '<span class="mv">' + h.move + '</span>' +
-        '<button class="copy" data-copy="' + h.move + '">' + t('copy') + '</button>' +
+        '<span class="mv">' + displayMove + '</span>' +
+        '<button class="copy" data-copy="' + displayMove + '">' + t('copy') + '</button>' +
       '</div>'
     );
   }
