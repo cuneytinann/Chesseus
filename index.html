@@ -2485,18 +2485,24 @@ const I18N = {
 let LANG = 'en';
 function t(key) { return I18N[LANG][key] || key; }
 
+// Mirror varyant dropdown'undaki etiketler — dil ne olursa olsun sade
+// kalsın ("L1", "L2", ...). Tablo updateVariantLabels() üzerinden
+// runtime'da set ediliyor; kullanmamıza gerek yok ama eski koda zarar
+// vermemek için yapıyı koruyoruz.
 const VARIANT_LABELS = {
   en: {
-    PMTD: 'L4 — full FIDE',
-    PMT:  'L3 — modern moves + clock',
-    PM:   'L2 — modern moves',
-    L1:   'L1 — bare engine (most primitive)',
+    L5: 'L5',
+    PMTD: 'L4',
+    PMT:  'L3',
+    PM:   'L2',
+    L1:   'L1',
   },
   tr: {
-    PMTD: 'L4 — tam FIDE',
-    PMT:  'L3 — modern hamleler + zaman',
-    PM:   'L2 — modern hamleler',
-    L1:   'L1 — en ilkel motor',
+    L5: 'L5',
+    PMTD: 'L4',
+    PMT:  'L3',
+    PM:   'L2',
+    L1:   'L1',
   },
 };
 
@@ -2889,7 +2895,7 @@ const REF = (() => {
     return { insufficient, F, a, nonKingSig: sig.join('') };
   }
 
-  function evaluateTermination(pos, flagFallSide) {
+  function evaluateTermination(pos, flagFallSide, drawClaim) {
     
     if (flagFallSide) {
       const W = flagFallSide === 'W';                       
@@ -2913,12 +2919,22 @@ const REF = (() => {
       }
       return { ended: true, kind: 'stalemate' };
     }
-    if (pos.halfmove >= 100) return { ended: true, kind: '50-move' };
+    
+    
+    if (isInsufficient(pos)) return { ended: true, kind: 'material' };
+    
+    
     const h = positionHash(pos);
     let cnt = 0;
     for (const old of pos.hashes) if (old === h) cnt++;
-    if (cnt >= 3) return { ended: true, kind: 'repetition' };
-    if (isInsufficient(pos)) return { ended: true, kind: 'material' };
+    if (cnt >= 5)               return { ended: true, kind: 'fivefold' };
+    if (pos.halfmove >= 150)    return { ended: true, kind: '75-move' };
+    
+    
+    if (drawClaim) {
+      if (pos.halfmove >= 100)  return { ended: true, kind: '50-move' };
+      if (cnt >= 3)             return { ended: true, kind: 'repetition' };
+    }
     return { ended: false, halfmove: pos.halfmove, repetitions: cnt };
   }
 
@@ -3247,6 +3263,12 @@ function checkMirrorVerdict(st) {
     const winner = st.Z === 'WR' ? 'Black' : 'White';
     return { ended: true, kind: 'resign', code: st.Z,
              text: 'Resign · ' + winner + ' wins (' + st.Z + ')' };
+  }
+  
+  
+  if (st.Z === 'DA') {
+    return { ended: true, kind: 'DA', code: 'DA',
+             text: 'Draw claim already pending · draw (DA)' };
   }
   
   if (MV.T && flagFallSide) {
@@ -3647,18 +3669,19 @@ function renderStatus() {
   } else {
     
     let parts = [(game.t === 'W' ? t('white') : t('black')) + ' ' + t('toMove')];
-    if (MV.T) parts.push(t('halfmove') + ' ' + game.n + '/100');
+    if (MV.T) parts.push(t('halfmove') + ' ' + game.n + '/' + (MV.C ? 150 : 100));
     if (MV.D) {
       
       const hash = posHash(game);
       let cnt = 0;
       for (const old of game.positions || []) if (old === hash) cnt++;
-      parts.push(t('reps') + ' ' + cnt + '/3');
+      parts.push(t('reps') + ' ' + cnt + '/' + (MV.C ? 5 : 3));
     }
+    if (MV.C && game.D) parts.push('draw offer ON');
     vL.text = parts.join(' · ');
   }
   
-  const refTerm = REF.evaluateTermination(refGame, flagFallSide);
+  const refTerm = REF.evaluateTermination(refGame, flagFallSide, !!game.D);
   let vR;
   if (refTerm.ended) {
     vR = { ended: true, kind: refTerm.kind,
@@ -3709,7 +3732,7 @@ function renderStatus() {
         (!mvKind || mvKind !== refKind)) ||
       
       
-      (MV.C && (mvKind === 'fivefold' || mvKind === '75-move' || mvKind === 'resign'))
+      (MV.C && (mvKind === 'fivefold' || mvKind === '75-move' || mvKind === 'resign' || mvKind === 'DA'))
     );
     if (isVariantGap) {
       
@@ -3843,7 +3866,27 @@ function commitMove(from, to, promoChar) {
   
   const moveStr = fromSq + toSq + (showPromo ? promoLower : '') + (drawClaim ? 'd' : '');
 
+  
+  
+  
+  const prevD = game.D;
+  
   makeMove(game, from, to, promoChar);
+  
+  
+  if (MV.C && drawClaim && prevD) {
+    
+    game.Z = 'DA';
+    game.history.push({
+      move: moveStr, isPromo: showPromo, side: mover,
+      isDrawClaim: true, isDA: true
+    });
+    game.positions.push(posHash(game));
+    lastMove = [from, to];
+    selected = null; legalTargets = [];
+    render();
+    return;
+  }
   
   
   
