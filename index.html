@@ -2361,6 +2361,38 @@ select[data-orig-lang-id] { display: none !important; }
     </span>
   </div>
   <div id="fenStatus" style="font-size:12px;margin:6px 0 0;min-height:16px"></div>
+  
+  
+  <div id="c960Panel" style="margin:10px 0 0;padding:8px 10px;border:1px dashed var(--rule);border-radius:4px;background:var(--paper)">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="c960Enable">
+      <strong>
+        <span class="lang-en">Chess960 mode (Fischer Random)</span>
+        <span class="lang-tr">Chess960 modu (Fischer Random)</span>
+      </strong>
+    </label>
+    <div id="c960Controls" style="display:none;margin:8px 0 0;font-size:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="min-width:120px">
+          <span class="lang-en">Position ID (0-959):</span>
+          <span class="lang-tr">Pozisyon ID (0-959):</span>
+        </span>
+        <input type="number" id="c960Idn" value="518" min="0" max="959" step="1" inputmode="numeric"
+               style="font-family:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);color:var(--ink);width:70px">
+        <button type="button" id="c960Random"
+                style="font-family:inherit;font-size:11px;padding:4px 10px;border:1px solid var(--rule);border-radius:4px;background:var(--bg);color:var(--ink);cursor:pointer">
+          <span class="lang-en">🎲 Random</span>
+          <span class="lang-tr">🎲 Rastgele</span>
+        </button>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);font-weight:600" id="c960Preview">RNBQKBNR</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin:6px 0 0">
+        <span class="lang-en">#518 = standard chess. Scharnagl numbering. The generated engine has Chess960 castling: king and rook click to castle.</span>
+        <span class="lang-tr">#518 = klasik satranç. Scharnagl numaralandırması. Üretilen motor Chess960 rok kullanır: şah ve kaleye tıklayarak rok yapılır.</span>
+      </div>
+    </div>
+  </div>
+  
   <label id="halfmoveRow" style="display:flex;align-items:center;gap:10px;margin:8px 0 0;flex-wrap:wrap">
     <span style="font-size:12px;min-width:170px">
       <span class="lang-en">Halfmove counter:</span>
@@ -4318,6 +4350,278 @@ window.helperSetLang = setLang;
 
 
 
+// ───────────────────────────────────────────────────────────────────
+// Chess960 (Fischer Random) yardımcıları
+// ───────────────────────────────────────────────────────────────────
+// Scharnagl numbering scheme (0-959). Klasik = #518.
+// idn = bishop_code + 16*queen_position + 96*n5n_code
+//   bishop_code: 0-15  (light bishop file + 4 * dark bishop file)
+//   queen_position: 0-5 (kalan 6 karenin soldan i'ıncısı)
+//   n5n_code: 0-9 (kalan 5 karede iki at için 10 farklı yer)
+// Algoritma + tablolar: https://en.wikipedia.org/wiki/Chess960_numbering_scheme
+
+const C960_N5N = [
+  [0,1],[0,2],[0,3],[0,4],
+  [1,2],[1,3],[1,4],
+  [2,3],[2,4],
+  [3,4]
+];
+
+function c960Position(idn) {
+  
+  
+  if (idn < 0 || idn > 959) return null;
+  const n5n  = Math.floor(idn / 96);
+  const rem  = idn % 96;
+  const qPos = Math.floor(rem / 16);
+  const bCode = rem % 16;
+  const B1 = bCode % 4;            // light bishop: file 1,3,5,7
+  const B2 = Math.floor(bCode / 4); // dark bishop:  file 0,2,4,6
+  const board = ['?','?','?','?','?','?','?','?'];
+  board[B1 * 2 + 1] = 'B';
+  board[B2 * 2]     = 'B';
+  
+  let empties = board.map((c,i) => c === '?' ? i : -1).filter(i => i >= 0);
+  board[empties[qPos]] = 'Q';
+  
+  empties = board.map((c,i) => c === '?' ? i : -1).filter(i => i >= 0);
+  board[empties[C960_N5N[n5n][0]]] = 'N';
+  board[empties[C960_N5N[n5n][1]]] = 'N';
+  
+  empties = board.map((c,i) => c === '?' ? i : -1).filter(i => i >= 0);
+  board[empties[0]] = 'R';
+  board[empties[1]] = 'K';
+  board[empties[2]] = 'R';
+  return board.join('');
+}
+
+
+function c960IsEnabled() {
+  const el = document.getElementById('c960Enable');
+  return el && el.checked;
+}
+
+
+function c960CurrentIdn() {
+  const el = document.getElementById('c960Idn');
+  if (!el) return 518;
+  const v = parseInt(el.value, 10);
+  if (isNaN(v) || v < 0 || v > 959) return 518;
+  return v;
+}
+
+
+// 960 pozisyondan motor inject parametrelerini çıkar.
+// bRq, bK, bRk = siyah 1. sıradaki indeksler (0..7).
+// Beyaz simetrik (siyah_indeks + 56).
+function c960Params(pos8) {
+  
+  const lower = pos8.toLowerCase();
+  const bK = lower.indexOf('k');
+  const rooks = [];
+  for (let i = 0; i < 8; i++) if (lower[i] === 'r') rooks.push(i);
+  const bRq = rooks[0]; // şahın solunda
+  const bRk = rooks[1]; // şahın sağında
+  
+  
+  function rangeInclusive(a, b) {
+    const out = [];
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) out.push(i);
+    return out;
+  }
+  
+  
+  const ksKingPath = rangeInclusive(bK, 6);
+  const ksRookPath = rangeInclusive(bRk, 5);
+  const ksUnion = new Set([...ksKingPath, ...ksRookPath]);
+  const ksEmpty = [...ksUnion].filter(i => i !== bK && i !== bRk).sort((a,b) => a-b);
+  const ksSafe  = ksKingPath.slice().sort((a,b) => a-b);
+  
+  
+  const qsKingPath = rangeInclusive(bK, 2);
+  const qsRookPath = rangeInclusive(bRq, 3);
+  const qsUnion = new Set([...qsKingPath, ...qsRookPath]);
+  const qsEmpty = [...qsUnion].filter(i => i !== bK && i !== bRq).sort((a,b) => a-b);
+  const qsSafe  = qsKingPath.slice().sort((a,b) => a-b);
+  
+  return { bK, bRq, bRk, ksEmpty, ksSafe, qsEmpty, qsSafe };
+}
+
+
+// 960 modu için motor patch'leri.
+// Mevcut DOM motoru (klasik rok mantığıyla) üzerinden:
+//   1) Board literali yeniden yazılır (FEN'den inject sonrası bile garanti et)
+//   2) R tablosu kale indekslerine göre güncellenir
+//   3) Patch A: G fonksiyonu rok hamlesi üretimi yeniden yazılır
+//   4) Patch B: M fonksiyonu rok yapma yeniden yazılır
+//   5) Patch C: Y handler rok-tıklama sırası değiştirilir
+function injectC960(html, pos8) {
+  const p = c960Params(pos8);
+  const { bK, bRq, bRk, ksEmpty, ksSafe, qsEmpty, qsSafe } = p;
+  
+  
+  
+  
+  
+  
+  
+  const upper = pos8;                          
+  const lower = pos8.toLowerCase();            
+  
+  
+  
+  const reBoard = /'[rnbqkbnRNBQKBNR]{16}'\+_\.repeat\(32\)\+'[A-Z]{8}[A-Z]{8}'|'[a-zA-Z]{8}pppppppp'\+_\.repeat\(32\)\+'PPPPPPPP[A-Z]{8}'/;
+  const newBoard = `'${lower}pppppppp'+_.repeat(32)+'PPPPPPPP${upper}'`;
+  if (reBoard.test(html)) {
+    html = html.replace(reBoard, newBoard);
+  }
+  
+  
+  const wRq = bRq + 56;
+  const wRk = bRk + 56;
+  const newR = `R={${bRq}:8,${bRk}:4,${wRq}:2,${wRk}:1}`;
+  const reR = /R=\{\d+:8,\d+:4,\d+:2,\d+:1\}/;
+  if (reR.test(html)) {
+    html = html.replace(reR, newR);
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  const reOldA = /if\(P=='K'&!J\(([bW])\)\)r=\1\*56,O=i=>s\[r\+i\]>_\|L\(r\+i,!\1\),o&4>>\1\*2&&!O\(5\)&!O\(6\)&&m\.push\(r\+6\),o&8>>\1\*2&&s\[r\+1\]==_&!O\(2\)&!O\(3\)&&m\.push\(r\+2\)/;
+  const matchA = html.match(reOldA);
+  if (!matchA) {
+    
+    
+    return html;
+  }
+  const varName = matchA[1];   
+  
+  function buildPatchA() {
+    const ksEmptyStr = ksEmpty.map(i => `s[${i}+r]==_`).join('&');
+    const ksSafeStr  = ksSafe.map(i  => `!L(${i}+r,!${varName})`).join('&');
+    const qsEmptyStr = qsEmpty.map(i => `s[${i}+r]==_`).join('&');
+    const qsSafeStr  = qsSafe.map(i  => `!L(${i}+r,!${varName})`).join('&');
+    
+    const ksParts = [`o&4>>${varName}*2`];
+    if (ksEmptyStr) ksParts.push(ksEmptyStr);
+    if (ksSafeStr)  ksParts.push(ksSafeStr);
+    ksParts.push(`m.push(${bRk}+r)`);
+    
+    const qsParts = [`o&8>>${varName}*2`];
+    if (qsEmptyStr) qsParts.push(qsEmptyStr);
+    if (qsSafeStr)  qsParts.push(qsSafeStr);
+    qsParts.push(`m.push(${bRq}+r)`);
+    
+    return `if(P=='K'&!J(${varName}))r=${varName}*56,${ksParts.join('&&')},${qsParts.join('&&')}`;
+  }
+  
+  const newA = buildPatchA();
+  html = html.replace(reOldA, newA);
+  
+  
+  
+  
+  function buildPatchB() {
+    return (
+      `if(P=='K'){` +
+      `T==${bRk}+j?s[5+j]='rR'[+${varName}]:` +
+      `T==${bRq}+j&&(s[T]=_,s[2+j]='kK'[+${varName}],s[3+j]='rR'[+${varName}]);` +
+      `o&=${varName}?~3:~12}`
+    );
+  }
+  
+  const reOldB = /if\(P=='K'\)X-x>1\?\(s\[j\+5\]=s\[j\+7\],s\[j\+7\]=_\):x-X>1&&\(s\[j\+3\]=s\[j\],s\[j\]=_\),o&=[bW]\?~3:~12/;
+  if (reOldB.test(html)) {
+    html = html.replace(reOldB, buildPatchB());
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  html = html.replace(/s\[i\^!t\*63\]/g, 's[i]');
+  html = html.replace(/outline=i\^!t\*63\^/g, 'outline=i^');
+  html = html.replace(/T\^=!t\*63;/g, '');
+  
+  
+  
+  
+  const reOldC = /Y=T=>\{if\(Z\)return;if\(s\[T\]>_&&s\[T\]<'a'==t\)sel=T,N\(\);else if\(~sel&&G\(sel\)\.includes\(T\)\)pf=sel,pt=T,U\(s\[sel\]\)=='P'&T\/8%7<1\?p\.className='on':K\("Q"\)\}/;
+  const newC = `Y=T=>{if(Z)return;if(~sel&&G(sel).includes(T))pf=sel,pt=T,U(s[sel])=='P'&T/8%7<1?p.className='on':K("Q");else if(s[T]>_&&s[T]<'a'==t)sel=T,N()}`;
+  if (reOldC.test(html)) {
+    html = html.replace(reOldC, newC);
+  }
+  
+  return html;
+}
+
+
+// UI: c960 paneli toggle + idn değişiminde pozisyon önizleme güncelle
+function c960InitUI() {
+  const enable = document.getElementById('c960Enable');
+  const controls = document.getElementById('c960Controls');
+  const idnInput = document.getElementById('c960Idn');
+  const preview = document.getElementById('c960Preview');
+  const randomBtn = document.getElementById('c960Random');
+  if (!enable || !controls || !idnInput || !preview) return;
+  
+  function refresh() {
+    if (enable.checked) {
+      controls.style.display = '';
+      const idn = c960CurrentIdn();
+      idnInput.value = String(idn);
+      preview.textContent = c960Position(idn);
+    } else {
+      controls.style.display = 'none';
+    }
+    
+    if (typeof updateGeneratorPreview === 'function') updateGeneratorPreview();
+  }
+  
+  enable.addEventListener('change', refresh);
+  idnInput.addEventListener('input', refresh);
+  idnInput.addEventListener('change', refresh);
+  if (randomBtn) {
+    randomBtn.addEventListener('click', () => {
+      idnInput.value = String(Math.floor(Math.random() * 960));
+      refresh();
+    });
+  }
+  refresh();
+}
+
+
 function getLevel() {
   
   const el = document.querySelector('input[name="optLevel"]:checked');
@@ -5210,6 +5514,20 @@ function generate() {
     }
     normalHtml = injectFlipRemoval(normalHtml);
     normalHtml = injectStatusRemoval(normalHtml);
+    
+    
+    
+    
+    
+    if (c960IsEnabled()) {
+      const idn = c960CurrentIdn();
+      const pos8 = c960Position(idn);
+      try {
+        normalHtml = injectC960(normalHtml, pos8);
+      } catch (err) {
+        console.error('Chess960 inject error:', err);
+      }
+    }
 
     lastSaf = normalHtml;
     safEl.textContent = normalHtml;
@@ -5509,6 +5827,11 @@ if (dlBtn) {
 }
 
 window.generatorRegen = () => { try { generate(); } catch(e) {} };
+
+
+if (typeof c960InitUI === 'function') {
+  try { c960InitUI(); } catch(e) {}
+}
 })();
 </script>
 
