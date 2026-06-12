@@ -2088,11 +2088,16 @@ select[data-orig-lang-id] { display: none !important; }
       <option value="L5" selected>L5</option>
     </select>
     <label id="mvRepSeedLabel" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:8px">
-      <span class="lang-en">Rep pre-seed:</span>
-      <span class="lang-tr">Tekrar ön-değeri:</span>
-      <input type="number" id="mvRepSeed" value="0" min="0" max="2" step="1" inputmode="numeric"
+      <span id="repSeedLblEn" class="lang-en">Position seen:</span>
+      <span id="repSeedLblTr" class="lang-tr">Pozisyon görülme:</span>
+      <input type="number" id="mvRepSeed" value="1" min="1" max="4" step="1" inputmode="numeric"
              style="width:42px;padding:3px 5px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);color:var(--ink);font-size:12px"
-             title="Pre-seed: how many times the starting position should be marked as already seen (0–2). Triggers 3-fold the next time the same position recurs.">
+             title="How many times has this position been seen (including now). 1 = fresh start. L4 max 2 (next repeat triggers 3R), L5 max 4 (next repeat triggers 5R).">
+      <span id="hmSeedLblEn" class="lang-en" style="font-size:11px;color:var(--muted);margin-left:6px">halfmove:</span>
+      <span id="hmSeedLblTr" class="lang-tr" style="font-size:11px;color:var(--muted);margin-left:6px">yarım hamle:</span>
+      <input type="number" id="mvHalfmoveSeed" value="0" min="0" max="149" step="1" inputmode="numeric"
+             style="width:48px;padding:3px 5px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);color:var(--ink);font-size:12px"
+             title="Halfmove counter seed: overrides FEN's halfmove. 0-99 normal; L3+: ≥100 enables 50-move draw; L5: ≥150 = 75-move auto.">
     </label>
   </div>
   <div class="row">
@@ -3755,6 +3760,20 @@ function renderStatus() {
     
     const refKind = vR.ended ? vR.kind : null;
     const mvKind  = vL.ended ? vL.kind : null;
+    
+    
+    
+    
+    const isSilent = (
+      MV.C && (mvKind === 'resign' || mvKind === 'DA')
+    );
+    if (isSilent) {
+      
+      banner.classList.remove('show');
+      banner.className = 'divergent-banner';
+      return;
+    }
+    
     const isVariantGap = (
       
       
@@ -3771,12 +3790,7 @@ function renderStatus() {
       
       
       
-      (!MV.C && (mvKind === '50-move' || mvKind === 'repetition') && !refKind) ||
-      
-      
-      
-      
-      (MV.C && (mvKind === 'resign' || mvKind === 'DA'))
+      (!MV.C && (mvKind === '50-move' || mvKind === 'repetition') && !refKind)
     );
     if (isVariantGap) {
       
@@ -4037,19 +4051,60 @@ function loadFromFEN(fen) {
 
 function applyMirrorRepSeed() {
   const label = document.getElementById('mvRepSeedLabel');
-  const input = document.getElementById('mvRepSeed');
-  if (!label || !input) return;
-  const showSeed = MV.D;   
-  label.style.display = showSeed ? 'inline-flex' : 'none';
-  if (!showSeed) {
-    input.value = '0';
-    return;
+  const repInput = document.getElementById('mvRepSeed');
+  const hmInput = document.getElementById('mvHalfmoveSeed');
+  if (!label || !repInput) return;
+  
+  
+  const showRep = MV.D;
+  const showHm  = MV.T;
+  label.style.display = (showRep || showHm) ? 'inline-flex' : 'none';
+  
+  
+  const setDisp = (id, on) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? '' : 'none';
+  };
+  setDisp('repSeedLblEn', showRep);
+  setDisp('repSeedLblTr', showRep);
+  setDisp('mvRepSeed',     showRep);
+  setDisp('hmSeedLblEn',   showHm);
+  setDisp('hmSeedLblTr',   showHm);
+  setDisp('mvHalfmoveSeed', showHm);
+  
+  
+  if (!showRep) {
+    repInput.value = '1';
+  } else {
+    const maxSeed = MV.C ? 4 : 2;
+    repInput.max = String(maxSeed);
+    const raw = parseInt(repInput.value, 10);
+    const n = Math.max(1, Math.min(maxSeed, isNaN(raw) ? 1 : raw));
+    repInput.value = String(n);
+    const extras = n - 1;
+    if (extras > 0 && game && Array.isArray(game.positions)) {
+      const h = posHash(game);
+      for (let i = 0; i < extras; i++) game.positions.push(h);
+    }
+    if (extras > 0 && refGame && Array.isArray(refGame.hashes)) {
+      const rh = REF.positionHash(refGame);
+      for (let i = 0; i < extras; i++) refGame.hashes.push(rh);
+    }
   }
-  const n = Math.max(0, Math.min(2, parseInt(input.value, 10) || 0));
-  if (n > 0 && game && Array.isArray(game.positions)) {
-    const h = posHash(game);
-    
-    for (let i = 0; i < n; i++) game.positions.push(h);
+  
+  
+  if (!showHm) {
+    if (hmInput) hmInput.value = '0';
+  } else if (hmInput) {
+    const hmMax = MV.C ? 149 : 99;
+    hmInput.max = String(hmMax);
+    const hmRaw = parseInt(hmInput.value, 10);
+    const hm = Math.max(0, Math.min(hmMax, isNaN(hmRaw) ? 0 : hmRaw));
+    hmInput.value = String(hm);
+    if (hm > 0 && game) {
+      game.n = hm;
+      if (refGame) refGame.halfmove = hm;
+    }
   }
 }
 
@@ -4147,12 +4202,29 @@ document.querySelectorAll('.cb-drawoffer').forEach(cb => {
 const mvRepSeedEl = document.getElementById('mvRepSeed');
 if (mvRepSeedEl) {
   mvRepSeedEl.addEventListener('change', () => {
-    let v = Math.max(0, Math.min(2, parseInt(mvRepSeedEl.value, 10) || 0));
+    
+    const maxSeed = MV.C ? 4 : 2;
+    let v = Math.max(1, Math.min(maxSeed, parseInt(mvRepSeedEl.value, 10) || 1));
     mvRepSeedEl.value = String(v);
     const fenInput = document.getElementById('fen').value.trim() || START_FEN;
     try { loadFromFEN(fenInput); } catch (err) { loadFromFEN(START_FEN); }
   });
   mvRepSeedEl.addEventListener('keypress', e => {
+    if (!/[0-9]/.test(e.key)) e.preventDefault();
+  });
+}
+
+
+const mvHalfmoveSeedEl = document.getElementById('mvHalfmoveSeed');
+if (mvHalfmoveSeedEl) {
+  mvHalfmoveSeedEl.addEventListener('change', () => {
+    const hmMax = MV.C ? 149 : 99;
+    let v = Math.max(0, Math.min(hmMax, parseInt(mvHalfmoveSeedEl.value, 10) || 0));
+    mvHalfmoveSeedEl.value = String(v);
+    const fenInput = document.getElementById('fen').value.trim() || START_FEN;
+    try { loadFromFEN(fenInput); } catch (err) { loadFromFEN(START_FEN); }
+  });
+  mvHalfmoveSeedEl.addEventListener('keypress', e => {
     if (!/[0-9]/.test(e.key)) e.preventDefault();
   });
 }
