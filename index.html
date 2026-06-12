@@ -2050,7 +2050,6 @@ select[data-orig-lang-id] { display: none !important; }
       <option value="L2">L2</option>
       <option value="L3">L3</option>
       <option value="L4" selected>L4</option>
-      <option value="L5">L5</option>
     </select>
     <label id="mvRepSeedLabel" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:8px">
       <span class="lang-en">Rep pre-seed:</span>
@@ -2248,12 +2247,12 @@ select[data-orig-lang-id] { display: none !important; }
   <label id="statusRow" style="display:none;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap;cursor:pointer">
     <input type="checkbox" id="optStatus" checked>
     <span style="font-size:12px">
-      <span class="lang-en">In-prompt counters (check / 50-move / repetition)</span>
-      <span class="lang-tr">Prompt sayaçları (şah / 50-hamle / tekrar)</span>
+      <span class="lang-en">Counters (check / 50-move / repetition)</span>
+      <span class="lang-tr">Sayaçlar (şah / 50-hamle / tekrar)</span>
     </span>
     <span style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
-      <span class="lang-en">More compliant with FIDE rules.</span>
-      <span class="lang-tr">Kurallara daha uygun.</span>
+      <span class="lang-en">Disabling is more FIDE-compliant.</span>
+      <span class="lang-tr">Kapalı olması FIDE açısından daha uygundur.</span>
     </span>
   </label>
   <label style="display:flex;align-items:center;gap:10px;margin:4px 0;flex-wrap:wrap">
@@ -2497,7 +2496,15 @@ function setLang(lang) {
   
   if (typeof render === 'function') render();
 }
-
+// ═══════════════════════════════════════════════════════════════════
+// MODÜL 1: REF — Bağımsız Referans Satranç Motoru
+// ═══════════════════════════════════════════════════════════════════
+// Test (Helper) sekmesinde kullanılan ikinci motor. Mirror motorunu
+// doğrulamak için tamamen ayrı bir implementasyon — tam FIDE kuralları
+// (rok, en passant, terfi seçimi, üçlü tekrar, 50-hamle, ölü pozisyon).
+// Tahtayı koordinat-string Map'iyle tutar ("a1" → {type:'r', color:'w'}),
+// Mirror ise 64'lük array kullanır. İki motor aynı hamlede aynı sonucu
+// vermezse "MOTOR BUG" uyarısı çıkar.
 const REF = (() => {
   
   const FILES = ['a','b','c','d','e','f','g','h'];
@@ -2936,10 +2943,15 @@ const REF = (() => {
 
   function findMove(pos, fromSq, toSq, promoChar) {
     const moves = generateMoves(pos);
+    
+    
+    
+    
+    const wanted = promoChar ? promoChar.toLowerCase() : 'q';
     for (const mv of moves) {
       if (mv.from === fromSq && mv.to === toSq) {
         if (mv.promotion) {
-          if (promoChar && mv.promotion === promoChar.toLowerCase()) return mv;
+          if (mv.promotion === wanted) return mv;
         } else {
           return mv;
         }
@@ -2974,6 +2986,17 @@ const REF = (() => {
   };
 })();
 
+// ═══════════════════════════════════════════════════════════════════
+// MODÜL 2: Mirror — versions/ klasöründeki motorların index.html portu
+// ═══════════════════════════════════════════════════════════════════
+// Test sekmesinde sol tahtada çalışır. Üretilen L1-L4 motorlarının
+// JS portudur — niyet: birebir aynı davranış. Tahta 64-uzunluğunda
+// karakter array'i (`s`), boş kare `_`, beyaz taşlar büyük (P,K,Q...),
+// siyah küçük (p,k,q...). `MV` bayrağı hangi kuralların aktif olduğunu
+// belirler ve seviye seçimine göre setMirrorLevel() tarafından ayarlanır.
+
+
+
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 const PIECE_GLYPH = {
@@ -2981,6 +3004,15 @@ const PIECE_GLYPH = {
   k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟'
 };
 
+// Mirror için temiz başlangıç state'i. Alanlar:
+//   s: 64 karelik tahta (0=a8, 63=h1; "_" boş, büyük=beyaz, küçük=siyah)
+//   t: sıra ('W' veya 'B')
+//   e: en passant kare indexi (-1 yoksa)
+//   o: rok hakları bitmask (15=hepsi açık)
+//   n: halfmove sayacı (50-hamle için)
+//   fullmove: tam hamle numarası
+//   history: oynanan hamleler dizisi
+//   positions: tekrar tespiti için pozisyon hash'leri
 function newState() {
   return {
     s: 'rnbqkbnrpppppppp________________________________PPPPPPPPRNBQKBNR'.split(''),
@@ -2994,12 +3026,25 @@ function newState() {
   };
 }
 
+
+// Yardımcılar:
+//   w(p): taş beyaz mı? (büyük harf ve "_" olmayan)
+//   ROOK_BIT: rok haklarının bit maskesi (a8=8, h8=4, a1=2, h1=1)
+//   A: Math.abs kısaltması (Mirror motor kodunun şifreli stilinde)
+//   S: Math.sign kısaltması
 const w = p => p < 'a' && p !== '_';
 const ROOK_BIT = {0:8, 7:4, 56:2, 63:1};
 const A = Math.abs;
 const S = Math.sign;
 
-const MV = { T: true, M: true, P: true, D: true };
+
+// Hangi kuralların Mirror'da aktif olduğunu seçen bayraklar.
+// Test sekmesindeki Lx seçimine göre setMirrorLevel() ayarlar.
+//   M (Modern): rok, en passant, 2-kare piyon, terfi seçimi
+//   T (Time):   50-hamle/halfmove sayacı, süre düşümü
+//   D (Draw):   üçlü tekrar, ölü pozisyon otomatik beraberlik
+// L1: hepsi false  ·  L2: M  ·  L3: M+T  ·  L4: M+T+D
+const MV = { T: true, M: true, D: true };
 
 function clearPath(st, f1, t1) {
   const x = f1%8, y = f1>>3, X = t1%8, Y = t1>>3;
@@ -3035,6 +3080,11 @@ function inCheck(st, W) {
   return attacked(st, k, !W);
 }
 
+
+// idx karesindeki taşın yapabileceği yasal hamlelerin hedef kare
+// listesini döndürür. Şah çekilmesini bırakan hamleleri filtreler.
+// MV.M kapalıysa (L1) rok, en passant ve 2-kare piyon hareketlerini
+// üretmez — Mirror'ı L1 motoruyla aynı kısıtlamalara sokar.
 function genMoves(st, idx) {
   const p = st.s[idx];
   if (p === '_') return [];
@@ -3090,6 +3140,12 @@ function cloneState(st) {
   };
 }
 
+
+// Yasal kabul edilmiş bir hamleyi state üzerinde uygular.
+// Yan etkiler: tahta dizisini günceller, rok haklarını (o) düşürür,
+// en passant karesini (e) yeniler, halfmove sayacını (n) ilerletir
+// veya sıfırlar, sıra değiştirir. MV.M kapalıysa (L1) tüm gelişmiş
+// kısımlar (rok yer değişimi, ep silimi, ep flag yenileme) atlanır.
 function makeMove(st, f1, t1, promoChar) {
   const p = st.s[f1];
   const P = p.toUpperCase();
@@ -3117,7 +3173,7 @@ function makeMove(st, f1, t1, promoChar) {
   st.n = (P === 'P' || cap) ? 0 : st.n + 1;
   
   if (P === 'P' && !(Y % 7)) {
-    const pc = MV.P ? (promoChar||'Q') : 'Q';
+    const pc = MV.M ? (promoChar||'Q') : 'Q';
     st.s[t1] = W ? pc.toUpperCase() : pc.toLowerCase();
   }
   
@@ -3145,6 +3201,12 @@ function allLegalMoves(st) {
   return out;
 }
 
+
+// Mevcut state için oyun-sonu durumunu değerlendirir.
+// Sırayla kontrol eder: süre düşmesi → şah-mat → pat → 50-hamle
+// → ölü pozisyon → üçlü tekrar. MV bayraklarına göre bazı
+// kontroller atlanır (örn. L1'de sadece mat ve pat geçerli).
+// Döndürür: { ended, kind, code, text } — ended=false ise oyun sürer.
 function checkMirrorVerdict(st) {
   
   if (MV.T && flagFallSide) {
@@ -3155,7 +3217,7 @@ function checkMirrorVerdict(st) {
       const h = st.s.filter(p => p !== '_' && (p < 'a') === W && p.toUpperCase() !== 'K')
                     .map(p => p.toUpperCase()).join('');
       
-      const opp = runI(st, !W);
+      const opp = checkInsufficientMaterial(st, !W);
       const TM = opp.insufficient && (
         h === 'Q' ||
         (h === 'R' && !opp.F) ||
@@ -3200,7 +3262,11 @@ function checkMirrorVerdict(st) {
   return { ended: false, code: null, text: parts.join(' · ') };
 }
 
-function runI(st, sideWhite) {
+
+// Belirli bir tarafın mat çıkartacak yeterli materyali kalmadı mı?
+// Tek kral / kral+at / kral+fil / tek-renk fil grubu gibi durumlar.
+// Döndürür: { insufficient, a (fil-renk bitmap), F (at sayısı) }.
+function checkInsufficientMaterial(st, sideWhite) {
   let a = 0, F = 0, m = 0;
   for (let k = 0; k < 64; k++) {
     const p = st.s[k];
@@ -3216,6 +3282,10 @@ function runI(st, sideWhite) {
   return { insufficient, a, F };
 }
 
+
+// İki taraf da mat çıkartamıyor mu? (otomatik beraberlik)
+// K vs K, K+B vs K, K+N vs K, K+B vs K+B aynı renk filler.
+// MV.D aktifken (L4) tetiklenir.
 function isDeadPosition(st) {
   const B = st.s.join('');
   
@@ -3232,6 +3302,10 @@ function isDeadPosition(st) {
   return false;
 }
 
+
+// Standart FEN string'ini Mirror state'e çevirir.
+// "rnbq.../... w KQkq - 0 1" → { s, t, e, o, n, fullmove, ... }
+// Hatalı FEN'de Error fırlatır.
 function parseFEN(fen) {
   const parts = fen.trim().split(/\s+/);
   if (parts.length < 1) throw new Error('Empty FEN');
@@ -3287,6 +3361,17 @@ let pendingPromo = null;
 
 let crossDivergence = null; 
 
+// ═══════════════════════════════════════════════════════════════════
+// MODÜL 3: Helper UI — Test sekmesi
+// ═══════════════════════════════════════════════════════════════════
+// İki tahta yan yana: sol (boardL) Mirror motorunu çalıştırır ve
+// tıklanabilir; sağ (boardR) REF (Reference) motorunun aynası, salt
+// gösterim. Kullanıcı sol tahtada taş oynar → hem Mirror hem REF
+// aynı hamleyi işler → karşılaştırılır. Notasyon paneli (movesEl)
+// her hamleyi UCI formatında listeler.
+
+
+
 const boardL = document.getElementById('boardL'); 
 const boardR = document.getElementById('boardR'); 
 const statusL = document.getElementById('statusL');
@@ -3295,6 +3380,8 @@ const banner = document.getElementById('banner');
 const movesEl = document.getElementById('moves');
 const promoOverlay = document.getElementById('promo');
 
+// Tahta için 64 hücreyi oluşturur (sadece bir kere). Sol tahta
+// için clickable=true → onSquareClick handler bağlanır.
 function buildBoardCells(host, clickable) {
   host.innerHTML = '';
   for (let i=0; i<64; i++) {
@@ -3323,6 +3410,8 @@ function buildBoardCells(host, clickable) {
 buildBoardCells(boardL, true);
 buildBoardCells(boardR, false);
 
+// Mirror state'ini REF formatıyla karşılaştırılabilir tek bir
+// objeye sıkıştırır (board hash, turn, castling, ep, halfmove).
 function helperSnapshot(st) {
   let board = '';
   for (let r = 0; r < 8; r++) {
@@ -3379,6 +3468,10 @@ function refToArray(refPos) {
   return arr;
 }
 
+
+// Helper UI'nın tüm görsel parçalarını yeniden çizer:
+// iki tahta, durum başlıkları, banner, notasyon. Her hamle
+// sonrası ve FEN yükleme sonrası çağrılır.
 function render() {
   renderBoard(boardL, game.s);
   renderBoard(boardR, refToArray(refGame));
@@ -3558,6 +3651,11 @@ function renderNotation() {
   movesEl.scrollTop = movesEl.scrollHeight;
 }
 
+
+// Sol tahtadaki bir kareye tıklama handler'ı.
+// Akış: ya bir taş seçilir (vurgu) ya da seçili taştan hedef kareye
+// hamle yapılır. Promotion karesinde MV.M aktifse Q/R/B/N overlay'i
+// açılır, kapalıysa (L1) otomatik vezir.
 function onSquareClick(idx) {
   const vL = checkMirrorVerdict(game);
   if (vL.ended) return;
@@ -3584,7 +3682,7 @@ function onSquareClick(idx) {
     const piece = game.s[selected];
     const isPromotion = piece.toUpperCase() === 'P' && (idx>>3 === 0 || idx>>3 === 7);
     if (isPromotion) {
-      if (!MV.P) {
+      if (!MV.M) {
         
         commitMove(selected, idx, null);
         return;
@@ -3607,20 +3705,29 @@ function onSquareClick(idx) {
   }
 }
 
+
+// Bir hamleyi hem Mirror hem REF üzerinde uygular ve sonuçları karşılaştırır.
+// Promotion notasyonu: Q (vezir) "normal hamle" gibi yazılır (a7a8),
+// underpromotion R/B/N için harf eklenir (a7a8r). Snapshot'lar eşit
+// değilse crossDivergence kaydı oluşur → kırmızı uyarı banner'ı.
 function commitMove(from, to, promoChar) {
   const fromSq = sqName(from);
   const toSq = sqName(to);
-  const moveStr = fromSq + toSq + (promoChar ? promoChar.toLowerCase() : '');
+  
+  
+  const promoLower = promoChar ? promoChar.toLowerCase() : null;
+  const showPromo = promoLower && promoLower !== 'q';
+  const moveStr = fromSq + toSq + (showPromo ? promoLower : '');
 
   const mover = game.t;  
   makeMove(game, from, to, promoChar);
-  game.history.push({ move: moveStr, isPromo: !!promoChar, side: mover });
+  game.history.push({ move: moveStr, isPromo: showPromo, side: mover });
   game.positions.push(posHash(game));
 
-  const refMv = REF.findMove(refGame, fromSq, toSq, promoChar ? promoChar.toLowerCase() : null);
+  const refMv = REF.findMove(refGame, fromSq, toSq, promoLower);
   if (!refMv) {
     crossDivergence = {
-      reason: t('refRefusedMove').replace('{move}', moveStr + (promoChar||'')),
+      reason: t('refRefusedMove').replace('{move}', moveStr),
       helperSnap: helperSnapshot(game),
       refSnap: REF.snapshot(refGame),
       expected: false
@@ -3639,7 +3746,7 @@ function commitMove(from, to, promoChar) {
         let expected = false;
         if (promoChar) {
           
-          if (!MV.P && diffs.every(f => f === 'board')) expected = true;
+          if (!MV.M && diffs.every(f => f === 'board')) expected = true;
         } else {
           
           if (!MV.M && diffs.every(f => f === 'board' || f === 'castling' || f === 'ep')) expected = true;
@@ -3674,6 +3781,9 @@ document.querySelectorAll('.promo-pieces button').forEach(btn => {
   });
 });
 
+// Kullanıcı FEN girdisinden hem Mirror'a hem REF'e başlangıç
+// pozisyonu yükler. Tekrar ön-değeri (mvRepSeed) varsa
+// hashes/positions tablolarını ona göre doldurur.
 function loadFromFEN(fen) {
   const newGame = parseFEN(fen);
   const newRef = REF.fromFEN(fen);
@@ -3727,17 +3837,19 @@ document.getElementById('newGame').addEventListener('click', () => {
   loadFromFEN(START_FEN);
 });
 
+
+// Seçilen Lx seviyesine göre Mirror'ın kural bayraklarını ayarlar.
+// Test sekmesindeki Lx dropdown'undan tetiklenir. Başlık etiketini
+// "Lx.html port" olarak günceller.
 function setMirrorLevel(lv) {
-  MV.M = (lv === 'L2' || lv === 'L3' || lv === 'L4' || lv === 'L5');
-  MV.P = MV.M;                          
-  MV.T = (lv === 'L3' || lv === 'L4' || lv === 'L5');
-  MV.D = (lv === 'L4' || lv === 'L5');
+  MV.M = (lv === 'L2' || lv === 'L3' || lv === 'L4');
+  MV.T = (lv === 'L3' || lv === 'L4');
+  MV.D = (lv === 'L4');
   
   const titleEn = document.getElementById('mirrorTitleEn');
   const titleTr = document.getElementById('mirrorTitleTr');
-  const fullFide = (lv === 'L5');
-  if (titleEn) titleEn.textContent = lv + '.html port' + (fullFide ? ' (full FIDE)' : '');
-  if (titleTr) titleTr.textContent = lv + '.html portu' + (fullFide ? ' (tam FIDE)' : '');
+  if (titleEn) titleEn.textContent = lv + '.html port';
+  if (titleTr) titleTr.textContent = lv + '.html portu';
 }
 document.getElementById('mvSelect').addEventListener('change', e => {
   setMirrorLevel(e.target.value);
@@ -3812,6 +3924,20 @@ window.helperSetLang = setLang;
 <script>
 (function(){
 
+// ═══════════════════════════════════════════════════════════════════
+// MODÜL 4: Generator — Üreteç sekmesi
+// ═══════════════════════════════════════════════════════════════════
+// Kullanıcı seçenekleri (level, FEN, saat, tahta döndürme, sayaçlar
+// vb.) seçer → generate() versions/ klasöründen ilgili base dosyayı
+// (örn. DOM_L4.html) çeker → enjeksiyon zinciri uygular:
+//   1) injectTimeNormal       — saat değişimleri (base/inc)
+//   2) injectFenIntoVariant   — özel başlangıç pozisyonu
+//   3) injectFlipRemoval      — tahta döndürme kapalıysa parçaları söker
+//   4) injectStatusRemoval    — sayaçlar kapalıysa header'ı sadeleştirir
+// Sonuç düz HTML olarak <pre>'ye yazılır. Kullanıcı indir/kopyala.
+
+
+
 function getLevel() {
   
   const el = document.querySelector('input[name="optLevel"]:checked');
@@ -3849,7 +3975,11 @@ function getUI() {
   };
 }
 
-function getVariantFile() {
+
+// Seçili seçeneklere göre versions/ klasöründen hangi base dosyayı
+// alacağımızı belirler: DOM_/prompt prefix + Lx + opsiyonel suffix
+// (örn. _noZ). Bu dosya henüz hiç enjeksiyon almamış ham hâldir.
+function getBaseVariantFile() {
   const level = getLevel();
   const render = getRender();
   const ui = getUI();
@@ -3872,7 +4002,12 @@ function extrasLockedFor(level) {
   return false;
 }
 
-function getName() {
+
+// Mevcut UI seçeneklerinden bir dosya adı oluşturur:
+//   DOM_L4_FEN_900+10_noFlip   (DOM, L4, özel FEN, 15+10 saat, döndürme yok)
+// Tag'ler sırasıyla: prefix + level + showSuffix + fenTag + timeTag
+//   + incTag + flipTag + statusTag. Tag yoksa atlanır.
+function buildOutputFileName() {
   const level = getLevel();
   const render = getRender();
   const ui = getUI();
@@ -3925,7 +4060,7 @@ function getName() {
   }
 
   const flipTag = ui.flip ? '' : '_noFlip';
-  const statusTag = (level === 'L5' && render === 'prompt' && !ui.status) ? '_noS' : '';
+  const statusTag = (level === 'L5' && !ui.status) ? '_noS' : '';
 
   return prefix + level + showSuffix + fenTag + timeTag + incTag + flipTag + statusTag;
 }
@@ -3965,7 +4100,12 @@ function normalizeFenInput(input) {
 
   return s.trim();
 }
-function parseFen(fenStr, level) {
+
+// Kullanıcının yazdığı FEN string'ini doğrular ve generator'ın iç
+// state formatına çevirir. Seviye bilgisini kullanır (örn. L1'de
+// rok hakları/ep yoksayılır). Hatalı FEN için açıklayıcı hata
+// mesajı döndürür (i18n etiketli).
+function parseUserFenInput(fenStr, level) {
   const fen = (fenStr || '').trim();
   if (!fen) return { ok: false, error: '' };
 
@@ -4223,7 +4363,13 @@ function rewriteHalfmoveChain(html, n, layout) {
   return result + html.slice(lastEnd);
 }
 
-function injectFenIntoSourceNormal(html, state, repCount, level) {
+
+// Base dosyaya özel başlangıç pozisyonu yerleştirir. Regex'lerle
+// motor başındaki "s=[...]" tahta literali, "e=", "o=", "n=" ve
+// (varsa) "P={}" tekrar tablosu yenilenir. Standart başlangıç
+// pozisyonu zaten base dosyada var — bu fonksiyon sadece özel FEN
+// için çağrılır.
+function injectFenIntoVariant(html, state, repCount, level) {
   const boardLit = encodeBoardLiteral(state.s);
 
   
@@ -4299,43 +4445,6 @@ function injectFenIntoSourceNormal(html, state, repCount, level) {
   return html;
 }
 
-function injectFenIntoSourcePipeline(html, state, repCount, level) {
-  const boardLit = encodeBoardLiteral(state.s);
-  const hasEO = (level === 'L2' || level === 'L3' || level === 'L4');
-  const hasN  = (level === 'L3' || level === 'L4');
-  const hasP  = (level === 'L4');
-
-  html = html.replace(/s=\[\.\.\.[^\]]+\]/, "s=[..." + boardLit + "]");
-
-  html = html.replace(/(,|^)([tW])=\d(?=,)/, (_m, p1, name) => p1 + name + '=' + state.t);
-
-  if (hasEO) {
-    html = html.replace(/(,|^)e=(?:-?\d+|_)(?=,)/, (_m, p1) => p1 + 'e=' + state.e);
-  }
-  if (hasEO) {
-    html = html.replace(/(,|^)o=\d+(?=,)/, (_m, p1) => p1 + 'o=' + state.o);
-  }
-  if (hasN) {
-    
-    const before = html;
-    html = html.replace(/(,|^)n=\d+(?=,)/, (_m, p1) => p1 + 'n=' + state.n);
-    if (html === before) {
-      html = rewriteHalfmoveChain(html, state.n, 'pipeline-main');
-    }
-  }
-  if (hasP && repCount > 0) {
-    const turnBool = Boolean(state.t);
-    const hashKey = state.s.join('') + [turnBool, state.e, state.o].join(',');
-    const literal = JSON.stringify(hashKey) + ':' + repCount;
-    html = html.replace(/(,|^)P=\{\}(?=,)/, (_m, p1) => p1 + 'P={' + literal + '}');
-  }
-  return html;
-}
-
-function injectFenIntoSource(html, state, repCount, level) {
-  return injectFenIntoSourceNormal(html, state, repCount, level);
-}
-
 function variantKey() {
   return getLevel();
 }
@@ -4403,6 +4512,10 @@ function syncShowDropdownLabels() {
   }
 }
 
+
+// UI durumunu okur, base dosyayı çeker, enjeksiyon zincirini
+// uygular ve sonucu çıktı kutusuna yazar. UI değişikliği her
+// olduğunda çağrılır (debounce yok, hızlı).
 function generate() {
   const level = getLevel();
   const render = getRender();
@@ -4420,7 +4533,7 @@ function generate() {
   
   const statusRow = document.getElementById('statusRow');
   if (statusRow) {
-    const statusActive = (level === 'L5' && render === 'prompt');
+    const statusActive = (level === 'L5');
     statusRow.style.display = statusActive ? 'flex' : 'none';
   }
 
@@ -4515,7 +4628,7 @@ function generate() {
   const fenStatusEl = document.getElementById('fenStatus');
   let fenState = null;
   if (fenStr) {
-    const r = parseFen(fenStr, level);
+    const r = parseUserFenInput(fenStr, level);
     if (!r.ok) {
       window.__fenState = { ok: false };
       if (fenStatusEl) {
@@ -4559,9 +4672,9 @@ function generate() {
   }
 
   const ui2 = getUI();
-  const variantBase = getVariantFile();
+  const variantBase = getBaseVariantFile();
   const normalFile  = variantBase + '.html';
-  const displayName = getName() + '.html';
+  const displayName = buildOutputFileName() + '.html';
   const safEl = document.getElementById('output');
   const fnameEl = document.getElementById('fname');
   const bytesEl = document.getElementById('bytes');
@@ -4577,6 +4690,9 @@ function generate() {
     : 0;
   const fenStateLocal = fenState;
 
+  // Saat opsiyonlarını uygular: base süre (u=, n=/v=), eşit olmayan
+  // başlangıç, ve increment (örn. "u+=5"). Saat kapalıysa increment
+  // satırını tamamen siler.
   function injectTimeNormal(html) {
     if (!clockOn) return html;
     const { base, inc, baseW, baseB, uneqActive } = readTimeOpts();
@@ -4602,6 +4718,9 @@ function generate() {
     return html;
   }
 
+  // Tahta döndürme kapalıysa motorlardaki "^!t*63" XOR maskelerini
+  // söker. Prompt'ta tek nokta (-6 bayt), DOM'da üç nokta (-21 bayt):
+  // tahta render indexi, kare vurgulama outline'ı, ve tıklama dönüşümü.
   function injectFlipRemoval(html) {
     
     
@@ -4624,6 +4743,10 @@ function generate() {
     return html;
   }
 
+  // Sayaçlar (M=halfmove, R=tekrar sayısı) kapalıysa L5 başlığını
+  // sadeleştirir. Prompt'ta header daraltılır, DOM'da d2 div'i ve
+  // render satırı silinir, ayrıca beraberlik teklifi için kırmızı
+  // border (#x.d{outline:solid red}) geri eklenir (görsel uyarı).
   function injectStatusRemoval(html) {
     
     
@@ -4631,17 +4754,52 @@ function generate() {
     
     
     
+    
+    
     if (ui2.status) return html;
-    if (level !== 'L5' || render !== 'prompt') return html;
+    if (level !== 'L5') return html;
 
+    if (render === 'prompt') {
+      
+      
+      
+      
+      
+      return html.replace(
+        "${t?'a8':'h1'}      ${D?'D?  ':''}  M=${n}   R=${P[b]||1} ",
+        "${t?'a8':'h1'}            ${D?'D?':''}"
+      );
+    }
     
     
-    return html.replace(
-      /\$\{t\?'a8':'h1'\}    \$\{J\(t\)\?'!    ':''\}M=\$\{n\}   R=\$\{P\[b\]\|\|1\}/,
-      "${t?'a8':'h1'}         "
+    
+    
+    
+    
+    html = html.replace('<div id=d2></div>', '');
+    html = html.replace(
+      /d2\.innerHTML=\(D\?'D\? ':''\)\+\(t\?'a8-5':'h1-4'\)\+' M='\+n\+' R='\+\(P\[s\+\[t,e,o\]\]\|\|1\)\s*;?/,
+      ''
     );
+    
+    
+    html = html.replace(
+      'th{font:30px/40px _}',
+      'th{font:30px/40px _}#x.d{outline:solid red}'
+    );
+    
+    
+    
+    html = html.replace(
+      'x.checked=D&(2-t)',
+      "x.checked=D&(2-t);x.className=D&(t+1)?'d':''"
+    );
+    return html;
   }
 
+  // FEN enjeksiyonu için kullanılacak state'i belirler. Özel FEN
+  // varsa onu, yoksa kullanıcı sadece halfmove/tekrar girmişse
+  // standart pozisyona o değerleri yerleştirir, hiçbiri yoksa null.
   function effectiveInjectState() {
     if (fenStateLocal && !fenStateLocal.isStart) return fenStateLocal.state;
     if (halfmoveInput > 0 || repCount > 0) {
@@ -4668,7 +4826,7 @@ function generate() {
     let normalHtml = injectTimeNormal(normalSrc);
     const stateForInject = effectiveInjectState();
     if (stateForInject) {
-      normalHtml = injectFenIntoSourceNormal(normalHtml, stateForInject, repCount, level);
+      normalHtml = injectFenIntoVariant(normalHtml, stateForInject, repCount, level);
     }
     normalHtml = injectFlipRemoval(normalHtml);
     normalHtml = injectStatusRemoval(normalHtml);
@@ -4724,7 +4882,7 @@ function downloadFile() {
   const blob = new Blob([lastSaf], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = getName() + '.html';
+  a.download = buildOutputFileName() + '.html';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -4758,7 +4916,7 @@ function downloadPacked() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   
-  a.download = getName() + '_regopt_packed.html';
+  a.download = buildOutputFileName() + '_regopt_packed.html';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -4965,7 +5123,7 @@ if (dlBtn) {
     const out = document.getElementById('output');
     if (!out.textContent) generate();
     const html = out.textContent;
-    const fname = (typeof getName === 'function' ? getName() : 'generated') + '.html';
+    const fname = (typeof buildOutputFileName === 'function' ? buildOutputFileName() : 'generated') + '.html';
     hubPlay(html, fname);
   });
 }
@@ -4975,6 +5133,15 @@ window.generatorRegen = () => { try { generate(); } catch(e) {} };
 </script>
 
 <script>
+// ═══════════════════════════════════════════════════════════════════
+// MODÜL 5: Hub — Sekme yönetimi ve dil seçimi
+// ═══════════════════════════════════════════════════════════════════
+// Üst navigation'daki sekmeler (Intro / Manual / Test / Generator)
+// arasında geçiş, "Şimdi oyna" iframe modal'ı, dil seçimi (TR/EN)
+// ve sayfa yüklemesinde otomatik dil tespiti.
+
+
+
 function hubSetLang(lang) {
   document.body.classList.remove('lang-en', 'lang-tr');
   document.body.classList.add('lang-' + lang);
@@ -5046,6 +5213,9 @@ hubSyncNavHeight();
 
 <script>
 
+// Intro sayfasında "Byte" istatistiklerini canlı dolduran script.
+// versions/FideLite.html'i çeker (örnek motor snippet'i + ham boyut),
+// versions/sizes.json'dan min/max/hero/variants sayılarını alır.
 function fillBytes(cls, n) {
   document.querySelectorAll('.' + cls).forEach(el => el.textContent = n);
 }
