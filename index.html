@@ -3906,6 +3906,34 @@ function fenMsg(s) {
   if (!m) return s;       
   return isEn ? m[1] : m[2];
 }
+
+function normalizeFenInput(input) {
+  
+  
+  
+  
+  
+  
+  
+  let s = (input || '').trim();
+  if (!s) return s;
+
+  
+  const lichessMatch = s.match(/lichess\.org\/(?:editor|analysis(?:\/standard)?)\/([^\s?#]+)/i);
+  if (lichessMatch) {
+    s = lichessMatch[1];
+  }
+
+  
+  if (s.indexOf('_') !== -1 && s.indexOf(' ') === -1) {
+    s = s.replace(/_/g, ' ');
+  }
+
+  
+  s = s.replace(/[?#].*$/, '');
+
+  return s.trim();
+}
 function parseFen(fenStr, level) {
   const fen = (fenStr || '').trim();
   if (!fen) return { ok: false, error: '' };
@@ -4444,7 +4472,7 @@ function generate() {
   }
   if (!halfmoveAllowed && halfmoveEl && halfmoveEl.value !== '0') halfmoveEl.value = '0';
 
-  const fenStr = (document.getElementById('optFen').value || '').trim();
+  const fenStr = normalizeFenInput(document.getElementById('optFen').value || '');
   const fenStatusEl = document.getElementById('fenStatus');
   let fenState = null;
   if (fenStr) {
@@ -4746,7 +4774,18 @@ function autoSyncBaseFromPlayers() {
 
 const fenEl = document.getElementById('optFen');
 if (fenEl) {
-  fenEl.addEventListener('input', generate);
+  
+  fenEl.addEventListener('input', () => {
+    if (window.__fenNormalizing) return;
+    const raw = fenEl.value;
+    const norm = normalizeFenInput(raw);
+    if (norm !== raw) {
+      window.__fenNormalizing = true;
+      fenEl.value = norm;
+      window.__fenNormalizing = false;
+    }
+    generate();
+  });
   fenEl.addEventListener('change', generate);
 }
 
@@ -4763,7 +4802,7 @@ if (halfmoveEl) {
     if (!Number.isFinite(n) || n < 0) n = 0;
     if (n > 99) n = 99;
     halfmoveEl.value = n;
-    const fenStr = (document.getElementById('optFen').value || '').trim();
+    const fenStr = normalizeFenInput(document.getElementById('optFen').value || '');
     if (!fenStr) return;            
     const parts = fenStr.split(/\s+/);
     if (parts.length < 5) return;   
