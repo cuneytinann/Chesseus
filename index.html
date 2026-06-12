@@ -2249,6 +2249,17 @@ select[data-orig-lang-id] { display: none !important; }
     <span class="lang-en">Display:</span>
     <span class="lang-tr">Görünüm:</span>
   </strong>
+  <label id="statusRow" style="display:none;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap;cursor:pointer">
+    <input type="checkbox" id="optStatus" checked>
+    <span style="font-size:12px">
+      <span class="lang-en">In-prompt counters (check / 50-move / repetition)</span>
+      <span class="lang-tr">Prompt sayaçları (şah / 50-hamle / tekrar)</span>
+    </span>
+    <span style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
+      <span class="lang-en">L5-prompt only. Off = strip the status header (−34 bytes).</span>
+      <span class="lang-tr">Sadece L5-prompt. Kapalı = sayaç başlığı silinir (−34 bayt).</span>
+    </span>
+  </label>
   <label style="display:flex;align-items:center;gap:10px;margin:4px 0;flex-wrap:wrap">
     <span style="min-width:140px">
       <span class="lang-en" id="optShowLabelEn">End-of-game notice</span>
@@ -2337,6 +2348,12 @@ select[data-orig-lang-id] { display: none !important; }
       <input type="number" id="optBaseB" value="600" min="1" max="9999" step="1" inputmode="numeric">
     </label>
   </div>
+  <div style="display:flex;justify-content:flex-end;margin-top:10px">
+    <button id="btnReset" type="button" style="font-size:11px;padding:5px 12px;background:var(--paper);border:1px solid var(--rule);color:var(--muted);border-radius:3px;cursor:pointer">
+      <span class="lang-en">↺ Reset to defaults</span>
+      <span class="lang-tr">↺ Varsayılana döndür</span>
+    </button>
+  </div>
 </div>
 
 <div class="info" id="info">
@@ -2366,13 +2383,6 @@ select[data-orig-lang-id] { display: none !important; }
 </div>
 
 <pre id="output" class="output" data-placeholder="Generated code will appear here..."></pre>
-
-<div style="display:flex;justify-content:flex-end;margin-top:8px">
-  <button id="btnReset" type="button" style="font-size:11px;padding:4px 10px;background:transparent;border:1px solid var(--rule);color:var(--muted);border-radius:3px;cursor:pointer">
-    <span class="lang-en">↺ Reset to defaults</span>
-    <span class="lang-tr">↺ Varsayılana döndür</span>
-  </button>
-</div>
 
 </div>
 </section>
@@ -3834,10 +3844,12 @@ function showClockUI(level) {
 
 function getUI() {
   const flipEl = document.getElementById('optFlip');
+  const statusEl = document.getElementById('optStatus');
   return {
     show: document.getElementById('optShow').value,   
     incEnabled: document.getElementById('optIncEnable').checked,
     flip: flipEl ? flipEl.checked : true,             
+    status: statusEl ? statusEl.checked : true,       
   };
 }
 
@@ -3917,8 +3929,9 @@ function getName() {
   }
 
   const flipTag = ui.flip ? '' : '_noFlip';
+  const statusTag = (level === 'L5' && render === 'prompt' && !ui.status) ? '_noS' : '';
 
-  return prefix + level + showSuffix + fenTag + timeTag + incTag + flipTag;
+  return prefix + level + showSuffix + fenTag + timeTag + incTag + flipTag + statusTag;
 }
 
 function fenMsg(s) {
@@ -4408,6 +4421,14 @@ function generate() {
   if (displayRow) displayRow.style.display = 'none';
 
   
+  
+  const statusRow = document.getElementById('statusRow');
+  if (statusRow) {
+    const statusActive = (level === 'L5' && render === 'prompt');
+    statusRow.style.display = statusActive ? 'flex' : 'none';
+  }
+
+  
   const showLocked = (level === 'L3' || level === 'L4' || level === 'L5');
   const showSelLock = document.getElementById('optShow');
   if (showSelLock) {
@@ -4607,6 +4628,24 @@ function generate() {
     return html;
   }
 
+  function injectStatusRemoval(html) {
+    
+    
+    
+    
+    
+    
+    if (ui2.status) return html;
+    if (level !== 'L5' || render !== 'prompt') return html;
+
+    
+    
+    return html.replace(
+      /\$\{t\?'a8':'h1'\}    \$\{J\(t\)\?'!    ':''\}M=\$\{n\}   R=\$\{P\[b\]\|\|1\}/,
+      "${t?'a8':'h1'}         "
+    );
+  }
+
   function effectiveInjectState() {
     if (fenStateLocal && !fenStateLocal.isStart) return fenStateLocal.state;
     if (halfmoveInput > 0 || repCount > 0) {
@@ -4636,6 +4675,7 @@ function generate() {
       normalHtml = injectFenIntoSourceNormal(normalHtml, stateForInject, repCount, level);
     }
     normalHtml = injectFlipRemoval(normalHtml);
+    normalHtml = injectStatusRemoval(normalHtml);
 
     lastSaf = normalHtml;
     safEl.textContent = normalHtml;
@@ -4771,6 +4811,7 @@ if (btnResetEl) {
     setRadio('optLevel', 'L5');
     setRadio('optRender', 'dom');
     setChecked('optFlip', true);
+    setChecked('optStatus', true);
     setVal('optShow', 'A');
     setVal('optFen', '');
     setVal('optRepCount', '0');
@@ -4804,6 +4845,9 @@ document.getElementById('optDisplay').addEventListener('change', generate);
 
 const optFlipEl = document.getElementById('optFlip');
 if (optFlipEl) optFlipEl.addEventListener('change', generate);
+
+const optStatusEl = document.getElementById('optStatus');
+if (optStatusEl) optStatusEl.addEventListener('change', generate);
 
 document.getElementById('optIncEnable').addEventListener('change', () => {
   const baseEl = document.getElementById('optBase');
