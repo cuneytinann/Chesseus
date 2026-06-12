@@ -4565,7 +4565,8 @@ function injectC960(html, pos8) {
   // Patch D: 50 hamle sayacı FIDE düzeltmesi.
   // Klasik motorda n=...|s[T]>_?0:... rok sırasında tıklanan kendi kalesini
   // "taş alımı" sayıp sayacı sıfırlar. FIDE'ye göre rok sayacı sıfırlamaz.
-  // Rok, şahın hedef karesine ulaşmasıyla tanınır (6+j şah kanadı, 2+j vezir kanadı).
+  // Rok, şahın kendi kale karesine tıklamasıyla tanınır (bRk=kısa, bRq=uzun kanat).
+  // L2'de sayaç satırı yok -> regex eşleşmez -> patch atlanır (zararsız).
   const reN = /n=P=='P'\|s\[T\]>_\?0:n\+1/;
   if (reN.test(html)) {
     html = html.replace(reN, `n=P=='P'|s[T]>_&!(P=='K'&(T==${bRk}+j|T==${bRq}+j))?0:n+1`);
