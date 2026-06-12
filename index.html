@@ -2050,6 +2050,7 @@ select[data-orig-lang-id] { display: none !important; }
       <option value="L2">L2</option>
       <option value="L3">L3</option>
       <option value="L4" selected>L4</option>
+      <option value="L5">L5</option>
     </select>
     <label id="mvRepSeedLabel" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:8px">
       <span class="lang-en">Rep pre-seed:</span>
@@ -2093,7 +2094,29 @@ select[data-orig-lang-id] { display: none !important; }
         </span>
       </div>
       <div class="flagfall-slot" id="flagfallTop"></div>
+      <div class="actions-row" id="actionsBlack" style="display:none;justify-content:space-between;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+        <button class="ghost btn-resign" data-side="B" style="padding:4px 10px;font-size:11px;cursor:pointer">
+          <span class="lang-en">Resign (Black)</span>
+          <span class="lang-tr">Çekilme (Siyah)</span>
+        </button>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" class="cb-drawoffer" data-side="B">
+          <span class="lang-en">½ Draw offer (Black)</span>
+          <span class="lang-tr">½ Beraberlik (Siyah)</span>
+        </label>
+      </div>
       <div class="board" id="boardL"></div>
+      <div class="actions-row" id="actionsWhite" style="display:none;justify-content:space-between;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+        <button class="ghost btn-resign" data-side="W" style="padding:4px 10px;font-size:11px;cursor:pointer">
+          <span class="lang-en">Resign (White)</span>
+          <span class="lang-tr">Çekilme (Beyaz)</span>
+        </button>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" class="cb-drawoffer" data-side="W">
+          <span class="lang-en">½ Draw offer (White)</span>
+          <span class="lang-tr">½ Beraberlik (Beyaz)</span>
+        </label>
+      </div>
       <div class="flagfall-slot" id="flagfallBottom"></div>
       <div class="status" id="statusL"></div>
     </div>
@@ -3022,7 +3045,11 @@ function newState() {
     n: 0,           
     fullmove: 1,    
     history: [],    
-    positions: []   
+    positions: [],  
+    
+    
+    D: 0,           
+    Z: 0            
   };
 }
 
@@ -3043,8 +3070,10 @@ const S = Math.sign;
 //   M (Modern): rok, en passant, 2-kare piyon, terfi seçimi
 //   T (Time):   50-hamle/halfmove sayacı, süre düşümü
 //   D (Draw):   üçlü tekrar, ölü pozisyon otomatik beraberlik
-// L1: hepsi false  ·  L2: M  ·  L3: M+T  ·  L4: M+T+D
-const MV = { T: true, M: true, D: true };
+//   C (Claims): L5 ek özellikleri — 75-hamle/5R otomatik, 50/3R iddia,
+//               resign, beraberlik teklifi (D5/DA mekanizması)
+// L1: hiçbiri  ·  L2: M  ·  L3: M+T  ·  L4: M+T+D  ·  L5: M+T+D+C
+const MV = { T: true, M: true, D: true, C: false };
 
 function clearPath(st, f1, t1) {
   const x = f1%8, y = f1>>3, X = t1%8, Y = t1>>3;
@@ -3136,7 +3165,9 @@ function cloneState(st) {
     n: st.n,
     fullmove: st.fullmove,
     history: st.history.slice(),
-    positions: st.positions.slice()
+    positions: st.positions.slice(),
+    D: st.D || 0,
+    Z: st.Z || 0
   };
 }
 
@@ -3203,11 +3234,20 @@ function allLegalMoves(st) {
 
 
 // Mevcut state için oyun-sonu durumunu değerlendirir.
-// Sırayla kontrol eder: süre düşmesi → şah-mat → pat → 50-hamle
-// → ölü pozisyon → üçlü tekrar. MV bayraklarına göre bazı
-// kontroller atlanır (örn. L1'de sadece mat ve pat geçerli).
-// Döndürür: { ended, kind, code, text } — ended=false ise oyun sürer.
+// Sırayla kontrol eder: resign → süre düşmesi → şah-mat → pat
+// → otomatik beraberlikler (5R/75-hamle/3R/50/ölü pozisyon)
+// → L5 iddiası varsa 50/3R iddia kontrolü.
+// MV bayraklarına göre bazı kontroller atlanır:
+//   MV.D yoksa (L1-L3): 3R, ölü pozisyon yok
+//   MV.C yoksa (L1-L4): 5R, 75-hamle yok ama 50/3R otomatik
+//   MV.C varsa  (L5):  5R/75 otomatik, 50/3R sadece iddia ile
 function checkMirrorVerdict(st) {
+  
+  if (st.Z === 'WR' || st.Z === 'BR') {
+    const winner = st.Z === 'WR' ? 'Black' : 'White';
+    return { ended: true, kind: 'resign', code: st.Z,
+             text: 'Resign · ' + winner + ' wins (' + st.Z + ')' };
+  }
   
   if (MV.T && flagFallSide) {
     const W = flagFallSide === 'W';                 
@@ -3245,20 +3285,40 @@ function checkMirrorVerdict(st) {
     return { ended: true, kind: 'stalemate', code: 'SM', text: 'Stalemate · draw (SM)' };
   }
 
-  if (MV.T && st.n >= 100) return { ended: true, kind: '50-move', code: '50', text: '50-move rule · draw (50)' };
-
-  const h = posHash(st);
-  let count = 0;
-  for (const old of st.positions) if (old === h) count++;
-  if (MV.D && count >= 3) return { ended: true, kind: 'repetition', code: '3R', text: 'Threefold repetition · draw (3R)' };
-
+  
   if (MV.D && isDeadPosition(st)) {
     return { ended: true, kind: 'material', code: 'IM', text: 'Insufficient material · draw (IM)' };
   }
 
+  const h = posHash(st);
+  let count = 0;
+  for (const old of st.positions) if (old === h) count++;
+
+  
+  if (MV.C && count >= 5) {
+    return { ended: true, kind: 'fivefold', code: '5R', text: 'Fivefold repetition · draw (5R)' };
+  }
+  if (MV.C && st.n >= 150) {
+    return { ended: true, kind: '75-move', code: '75', text: '75-move rule · draw (75)' };
+  }
+
+  
+  if (!MV.C) {
+    if (MV.D && count >= 3) return { ended: true, kind: 'repetition', code: '3R', text: 'Threefold repetition · draw (3R)' };
+    if (MV.T && st.n >= 100) return { ended: true, kind: '50-move', code: '50', text: '50-move rule · draw (50)' };
+  }
+  
+  
+  
+  if (MV.C && st.D) {
+    if (st.n >= 100) return { ended: true, kind: '50-move', code: '50', text: '50-move rule · draw (50)' };
+    if (count >= 3)  return { ended: true, kind: 'repetition', code: '3R', text: 'Threefold repetition · draw (3R)' };
+  }
+
   let parts = [(st.t==='W'?'White':'Black') + ' to move'];
-  if (MV.T) parts.push('halfmove ' + st.n + '/100');
-  if (MV.D) parts.push('reps ' + count + '/3');
+  if (MV.T) parts.push('halfmove ' + st.n + '/' + (MV.C ? 150 : 100));
+  if (MV.D) parts.push('reps ' + count + '/' + (MV.C ? 5 : 3));
+  if (MV.C && st.D) parts.push('draw offer ON');
   return { ended: false, code: null, text: parts.join(' · ') };
 }
 
@@ -3360,6 +3420,12 @@ let lastMove = null;
 let pendingPromo = null; 
 
 let crossDivergence = null; 
+
+
+// L5 beraberlik teklifi checkbox durumları (her iki taraf için ayrı).
+// Kullanıcı işaretlerse kendi kaldırana kadar seçili kalır; sırası
+// gelende her hamle bu bayrak set ise implicit 'd' suffix'li sayılır.
+const drawOfferState = { W: false, B: false };
 
 // ═══════════════════════════════════════════════════════════════════
 // MODÜL 3: Helper UI — Test sekmesi
@@ -3492,8 +3558,49 @@ function render() {
     }
   }
   renderFlagFallButton();
+  renderClaimsPanel();
   renderStatus();
   renderNotation();
+}
+
+
+// L5 (MV.C) seçiliyse beyaz/siyah için Resign + Draw offer satırlarını
+// göster. Sırası gelmeyen tarafın butonları disabled olur. Draw offer
+// checkbox bir kez seçilmişse kullanıcı kaldırana dek seçili kalır
+// (state üzerinden tutulur, render her seferinde DOM'u senkronlar).
+function renderClaimsPanel() {
+  const rowW = document.getElementById('actionsWhite');
+  const rowB = document.getElementById('actionsBlack');
+  if (!rowW || !rowB) return;
+  
+  if (!MV.C) {
+    rowW.style.display = 'none';
+    rowB.style.display = 'none';
+    return;
+  }
+  
+  rowW.style.display = 'flex';
+  rowB.style.display = 'flex';
+  
+  const v = checkMirrorVerdict(game);
+  const ended = v.ended;
+  const whiteTurn = (game.t === 'W');
+  
+  document.querySelectorAll('.btn-resign').forEach(btn => {
+    const isMyTurn = (btn.dataset.side === 'W') === whiteTurn;
+    btn.disabled = ended || !isMyTurn;
+    btn.style.opacity = btn.disabled ? '0.4' : '1';
+    btn.style.cursor = btn.disabled ? 'not-allowed' : 'pointer';
+  });
+  
+  
+  
+  document.querySelectorAll('.cb-drawoffer').forEach(cb => {
+    const isMyTurn = (cb.dataset.side === 'W') === whiteTurn;
+    cb.checked = !!drawOfferState[cb.dataset.side];
+    cb.disabled = ended || !isMyTurn;
+    if (cb.parentElement) cb.parentElement.style.opacity = cb.disabled ? '0.4' : '1';
+  });
 }
 
 function renderFlagFallButton() {
@@ -3594,7 +3701,15 @@ function renderStatus() {
       
       (!MV.D && refKind === 'timeout-material' && (mvKind === 'timeout')) ||
       
-      (!MV.T && refKind === '50-move')
+      (!MV.T && refKind === '50-move') ||
+      
+      
+      
+      (MV.C && (refKind === 'repetition' || refKind === '50-move') &&
+        (!mvKind || mvKind !== refKind)) ||
+      
+      
+      (MV.C && (mvKind === 'fivefold' || mvKind === '75-move' || mvKind === 'resign'))
     );
     if (isVariantGap) {
       
@@ -3628,8 +3743,11 @@ function renderNotation() {
   for (let i=game.history.length-1; i>=0; i--) {
     const h = game.history[i];
     const sideClass = h.side === 'B' ? ' black' : '';
+    const extraClass = (h.isPromo ? ' promo' : '') +
+                       (h.isResign ? ' resign' : '') +
+                       (h.isDrawClaim ? ' drawclaim' : '');
     rows.push(
-      '<div class="move-row' + (h.isPromo ? ' promo' : '') + sideClass + '">' +
+      '<div class="move-row' + extraClass + sideClass + '">' +
         '<span class="num">' + (i+1) + '</span>' +
         '<span class="mv">' + h.move + '</span>' +
         '<button class="copy" data-copy="' + h.move + '">' + t('copy') + '</button>' +
@@ -3717,11 +3835,21 @@ function commitMove(from, to, promoChar) {
   
   const promoLower = promoChar ? promoChar.toLowerCase() : null;
   const showPromo = promoLower && promoLower !== 'q';
-  const moveStr = fromSq + toSq + (showPromo ? promoLower : '');
+  
+  
+  
+  const mover = game.t;
+  const drawClaim = !!(MV.C && drawOfferState[mover]);
+  
+  const moveStr = fromSq + toSq + (showPromo ? promoLower : '') + (drawClaim ? 'd' : '');
 
-  const mover = game.t;  
   makeMove(game, from, to, promoChar);
-  game.history.push({ move: moveStr, isPromo: showPromo, side: mover });
+  
+  
+  
+  game.D = drawClaim ? 1 : 0;
+  
+  game.history.push({ move: moveStr, isPromo: showPromo, side: mover, isDrawClaim: drawClaim });
   game.positions.push(posHash(game));
 
   const refMv = REF.findMove(refGame, fromSq, toSq, promoLower);
@@ -3792,6 +3920,11 @@ function loadFromFEN(fen) {
   selected = null; legalTargets = []; lastMove = null; pendingPromo = null;
   crossDivergence = null;
   flagFallSide = null;
+  
+  
+  drawOfferState.W = false;
+  drawOfferState.B = false;
+  
   promoOverlay.classList.remove('show');
   applyMirrorRepSeed();
   render();
@@ -3842,9 +3975,10 @@ document.getElementById('newGame').addEventListener('click', () => {
 // Test sekmesindeki Lx dropdown'undan tetiklenir. Başlık etiketini
 // "Lx.html port" olarak günceller.
 function setMirrorLevel(lv) {
-  MV.M = (lv === 'L2' || lv === 'L3' || lv === 'L4');
-  MV.T = (lv === 'L3' || lv === 'L4');
-  MV.D = (lv === 'L4');
+  MV.M = (lv === 'L2' || lv === 'L3' || lv === 'L4' || lv === 'L5');
+  MV.T = (lv === 'L3' || lv === 'L4' || lv === 'L5');
+  MV.D = (lv === 'L4' || lv === 'L5');
+  MV.C = (lv === 'L5');
   
   const titleEn = document.getElementById('mirrorTitleEn');
   const titleTr = document.getElementById('mirrorTitleTr');
@@ -3853,8 +3987,56 @@ function setMirrorLevel(lv) {
 }
 document.getElementById('mvSelect').addEventListener('change', e => {
   setMirrorLevel(e.target.value);
+  
+  drawOfferState.W = false;
+  drawOfferState.B = false;
   const fenInput = document.getElementById('fen').value.trim() || START_FEN;
   try { loadFromFEN(fenInput); } catch (err) { loadFromFEN(START_FEN); }
+});
+
+
+// L5 Resign butonları — sırası gelen taraf çekilir, oyun biter.
+// Notasyona "R" (W için WR, B için BR) son hamle olarak işlenir.
+document.querySelectorAll('.btn-resign').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!MV.C) return;
+    const side = btn.dataset.side;  
+    if (game.t !== side) return;    
+    if (checkMirrorVerdict(game).ended) return;
+    
+    
+    game.Z = (side === 'W') ? 'WR' : 'BR';
+    game.history.push({ move: 'R', isResign: true, side });
+    
+    
+    lastMove = null;
+    selected = null; legalTargets = [];
+    
+    
+    
+    
+    
+    
+    
+    render();
+  });
+});
+
+
+// L5 beraberlik teklifi checkbox'ları — sırası gelende düzenlenir.
+// Bir kez seçilirse kullanıcı kaldırana kadar set kalır.
+document.querySelectorAll('.cb-drawoffer').forEach(cb => {
+  cb.addEventListener('change', () => {
+    if (!MV.C) { cb.checked = false; return; }
+    const side = cb.dataset.side;
+    if (game.t !== side) {
+      
+      cb.checked = drawOfferState[side];
+      return;
+    }
+    drawOfferState[side] = cb.checked;
+    render();
+  });
 });
 
 const mvRepSeedEl = document.getElementById('mvRepSeed');
@@ -3874,15 +4056,36 @@ document.getElementById('undo').addEventListener('click', () => {
   if (game.history.length === 0) return;
   const moves = game.history.slice(0, -1);
   
+  
+  drawOfferState.W = false;
+  drawOfferState.B = false;
+  document.querySelectorAll('.cb-drawoffer').forEach(cb => cb.checked = false);
+  
   const fenInput = document.getElementById('fen').value.trim() || START_FEN;
   try { loadFromFEN(fenInput); } catch (e) { loadFromFEN(START_FEN); }
   
   for (const m of moves) {
-    const f = (8 - parseInt(m.move[1]))*8 + (m.move.charCodeAt(0) - 97);
-    const t = (8 - parseInt(m.move[3]))*8 + (m.move.charCodeAt(2) - 97);
-    const promo = m.move[4] || null;
+    
+    if (m.isResign) {
+      game.Z = (m.side === 'W') ? 'WR' : 'BR';
+      game.history.push({ move: 'R', isResign: true, side: m.side });
+      break;
+    }
+    
+    
+    const mv = m.move;
+    const drawClaim = mv.endsWith('d');
+    const core = drawClaim ? mv.slice(0, -1) : mv;
+    
+    const f = (8 - parseInt(core[1]))*8 + (core.charCodeAt(0) - 97);
+    const t = (8 - parseInt(core[3]))*8 + (core.charCodeAt(2) - 97);
+    const promo = core[4] ? core[4].toUpperCase() : null;
+    
+    
+    if (drawClaim) drawOfferState[game.t] = true;
     commitMove(f, t, promo);
   }
+  render();
 });
 
 document.getElementById('copyAll').addEventListener('click', () => {
