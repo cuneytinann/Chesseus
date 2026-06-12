@@ -4531,12 +4531,12 @@ function injectC960(html, pos8) {
     const ksParts = [`o&4>>${varName}*2`];
     if (ksEmptyStr) ksParts.push(ksEmptyStr);
     if (ksSafeStr)  ksParts.push(ksSafeStr);
-    ksParts.push(`m.push(${bRk}+r)`);
+    ksParts.push(`m.push(6+r)`);
     
     const qsParts = [`o&8>>${varName}*2`];
     if (qsEmptyStr) qsParts.push(qsEmptyStr);
     if (qsSafeStr)  qsParts.push(qsSafeStr);
-    qsParts.push(`m.push(${bRq}+r)`);
+    qsParts.push(`m.push(2+r)`);
     
     return `if(P=='K'&!J(${varName}))r=${varName}*56,${ksParts.join('&&')},${qsParts.join('&&')}`;
   }
@@ -4550,8 +4550,8 @@ function injectC960(html, pos8) {
   function buildPatchB() {
     return (
       `if(P=='K'){` +
-      `T==${bRk}+j?s[5+j]='rR'[+${varName}]:` +
-      `T==${bRq}+j&&(s[T]=_,s[2+j]='kK'[+${varName}],s[3+j]='rR'[+${varName}]);` +
+      `T==6+j?(s[${bRk}+j]=_,s[5+j]='rR'[+${varName}],s[6+j]='kK'[+${varName}]):` +
+      `T==2+j&&(s[${bRq}+j]=_,s[3+j]='rR'[+${varName}],s[2+j]='kK'[+${varName}]);` +
       `o&=${varName}?~3:~12}`
     );
   }
@@ -4594,19 +4594,63 @@ function c960InitUI() {
   const idnInput = document.getElementById('c960Idn');
   const preview = document.getElementById('c960Preview');
   const randomBtn = document.getElementById('c960Random');
+  const fenInputEl = document.getElementById('optFen');
   if (!enable || !controls || !idnInput || !preview) return;
+  
+  
+  
+  function getFenPos8() {
+    if (!fenInputEl || !fenInputEl.value.trim()) return null;
+    if (typeof normalizeFenInput !== 'function' || typeof parseUserFenInput !== 'function') return null;
+    try {
+      const norm = normalizeFenInput(fenInputEl.value);
+      const lvl = (typeof getLevel === 'function') ? getLevel() : 'L5';
+      const r = parseUserFenInput(norm, lvl);
+      if (r && r.ok && r.c960Info && r.c960Info.pos8) return r.c960Info.pos8;
+    } catch(e) {}
+    return null;
+  }
   
   function refresh() {
     if (enable.checked) {
       controls.style.display = '';
-      const idn = c960CurrentIdn();
-      idnInput.value = String(idn);
-      preview.textContent = c960Position(idn);
+      
+      
+      const fenPos = getFenPos8();
+      if (fenPos) {
+        
+        const idnFromFen = (function() {
+          for (let i = 0; i < 960; i++) {
+            if (c960Position(i) === fenPos) return i;
+          }
+          return null;
+        })();
+        idnInput.disabled = true;
+        idnInput.style.opacity = '0.5';
+        if (idnFromFen !== null) idnInput.value = String(idnFromFen);
+        preview.textContent = fenPos + '  (from FEN)';
+        if (randomBtn) {
+          randomBtn.disabled = true;
+          randomBtn.style.opacity = '0.5';
+        }
+      } else {
+        idnInput.disabled = false;
+        idnInput.style.opacity = '';
+        const idn = c960CurrentIdn();
+        idnInput.value = String(idn);
+        preview.textContent = c960Position(idn);
+        if (randomBtn) {
+          randomBtn.disabled = false;
+          randomBtn.style.opacity = '';
+        }
+      }
     } else {
       controls.style.display = 'none';
     }
     
-    if (typeof updateGeneratorPreview === 'function') updateGeneratorPreview();
+    if (typeof window !== 'undefined' && typeof window.generatorRegen === 'function') {
+      try { window.generatorRegen(); } catch(e) {}
+    }
   }
   
   enable.addEventListener('change', refresh);
@@ -4614,9 +4658,15 @@ function c960InitUI() {
   idnInput.addEventListener('change', refresh);
   if (randomBtn) {
     randomBtn.addEventListener('click', () => {
-      idnInput.value = String(Math.floor(Math.random() * 960));
-      refresh();
+      if (!idnInput.disabled) {
+        idnInput.value = String(Math.floor(Math.random() * 960));
+        refresh();
+      }
     });
+  }
+  if (fenInputEl) {
+    fenInputEl.addEventListener('input', refresh);
+    fenInputEl.addEventListener('change', refresh);
   }
   refresh();
 }
@@ -4746,7 +4796,13 @@ function buildOutputFileName() {
   const flipTag = ui.flip ? '' : '_noFlip';
   const statusTag = (level === 'L5' && !ui.status) ? '_noS' : '';
 
-  return prefix + level + showSuffix + fenTag + timeTag + incTag + flipTag + statusTag;
+  
+  let c960Tag = '';
+  if (typeof c960IsEnabled === 'function' && c960IsEnabled()) {
+    c960Tag = '_960#' + c960CurrentIdn();
+  }
+
+  return prefix + level + showSuffix + fenTag + timeTag + incTag + flipTag + statusTag + c960Tag;
 }
 
 function fenMsg(s) {
@@ -4870,10 +4926,88 @@ function parseUserFenInput(fenStr, level) {
   if (wP > 8) warnings.push('[en] ' + wP + ' white pawns (exotic — cannot arise from a normal game, engine will still run) [tr] ' + wP + ' beyaz piyon (egzotik — normal bir oyundan oluşamaz, motor yine de çalışır)');
   if (bP > 8) warnings.push('[en] ' + bP + ' black pawns (exotic — cannot arise from a normal game, engine will still run) [tr] ' + bP + ' siyah piyon (egzotik — normal bir oyundan oluşamaz, motor yine de çalışır)');
 
-  if ((o & 1) && (s[60] !== 'K' || s[63] !== 'R')) { o &= ~1; warnings.push('[en] Cleared white kingside castling (K/R not on home) [tr] Beyaz şah-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
-  if ((o & 2) && (s[60] !== 'K' || s[56] !== 'R')) { o &= ~2; warnings.push('[en] Cleared white queenside castling (K/R not on home) [tr] Beyaz vezir-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
-  if ((o & 4) && (s[4]  !== 'k' || s[7]  !== 'r')) { o &= ~4; warnings.push('[en] Cleared black kingside castling (K/R not on home) [tr] Siyah şah-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
-  if ((o & 8) && (s[4]  !== 'k' || s[0]  !== 'r')) { o &= ~8; warnings.push('[en] Cleared black queenside castling (K/R not on home) [tr] Siyah vezir-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
+  
+  const isC960 = (typeof c960IsEnabled === 'function' && c960IsEnabled());
+  
+  if (!isC960) {
+    
+    if ((o & 1) && (s[60] !== 'K' || s[63] !== 'R')) { o &= ~1; warnings.push('[en] Cleared white kingside castling (K/R not on home) [tr] Beyaz şah-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
+    if ((o & 2) && (s[60] !== 'K' || s[56] !== 'R')) { o &= ~2; warnings.push('[en] Cleared white queenside castling (K/R not on home) [tr] Beyaz vezir-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
+    if ((o & 4) && (s[4]  !== 'k' || s[7]  !== 'r')) { o &= ~4; warnings.push('[en] Cleared black kingside castling (K/R not on home) [tr] Siyah şah-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
+    if ((o & 8) && (s[4]  !== 'k' || s[0]  !== 'r')) { o &= ~8; warnings.push('[en] Cleared black queenside castling (K/R not on home) [tr] Siyah vezir-tarafı rok hakkı silindi (Ş/K yerinde değil)'); }
+  }
+
+  
+  
+  
+  
+  
+  
+  let c960Info = null;
+  if (isC960) {
+    
+    const whiteRow = s.slice(56, 64).join('');
+    const blackRow = s.slice(0, 8).join('');
+    
+    const whiteKingFile = whiteRow.indexOf('K');
+    const blackKingFile = blackRow.indexOf('k');
+    if (whiteKingFile < 0 || blackKingFile < 0) {
+      return { ok: false, error: '[en] Chess960: kings must be on home ranks [tr] Chess960: şahlar ev sıralarında olmalı' };
+    }
+    
+    
+    const whiteRooks = [];
+    for (let i = 0; i < 8; i++) if (whiteRow[i] === 'R') whiteRooks.push(i);
+    const blackRooks = [];
+    for (let i = 0; i < 8; i++) if (blackRow[i] === 'r') blackRooks.push(i);
+    if (whiteRooks.length < 2 || blackRooks.length < 2) {
+      
+      
+      warnings.push('[en] Chess960: less than 2 rooks per side on home rank (castling rights may be cleared) [tr] Chess960: ev sırasında her renk için 2 kaleden az (rok hakları silinmiş olabilir)');
+    }
+    const wRq = whiteRooks.find(f => f < whiteKingFile);
+    const wRk = whiteRooks.find(f => f > whiteKingFile);
+    const bRq = blackRooks.find(f => f < blackKingFile);
+    const bRk = blackRooks.find(f => f > blackKingFile);
+    
+    
+    
+    
+    
+    
+    let o960 = 0;
+    if (o & 1) {
+      
+      if (wRk !== undefined) o960 |= 1; else warnings.push('[en] Cleared white kingside castling (no rook to the right of king) [tr] Beyaz şah-tarafı rok hakkı silindi (şahın sağında kale yok)');
+    }
+    if (o & 2) {
+      if (wRq !== undefined) o960 |= 2; else warnings.push('[en] Cleared white queenside castling (no rook to the left of king) [tr] Beyaz vezir-tarafı rok hakkı silindi (şahın solunda kale yok)');
+    }
+    if (o & 4) {
+      if (bRk !== undefined) o960 |= 4; else warnings.push('[en] Cleared black kingside castling (no rook to the right of king) [tr] Siyah şah-tarafı rok hakkı silindi (şahın sağında kale yok)');
+    }
+    if (o & 8) {
+      if (bRq !== undefined) o960 |= 8; else warnings.push('[en] Cleared black queenside castling (no rook to the left of king) [tr] Siyah vezir-tarafı rok hakkı silindi (şahın solunda kale yok)');
+    }
+    o = o960;
+    
+    
+    
+    if (blackKingFile !== whiteKingFile) {
+      return { ok: false, error: '[en] Chess960: white and black kings must be on the same file [tr] Chess960: beyaz ve siyah şahlar aynı dosyada olmalı' };
+    }
+    if (bRq !== wRq || bRk !== wRk) {
+      return { ok: false, error: '[en] Chess960: white and black rook files must match [tr] Chess960: beyaz ve siyah kale dosyaları eşleşmeli' };
+    }
+    
+    
+    c960Info = {
+      pos8: whiteRow,
+      bK: blackKingFile,
+      bRq: bRq !== undefined ? bRq : null,
+      bRk: bRk !== undefined ? bRk : null,
+    };
+  }
 
   if (e !== -1) {
     if (s[e] !== '_') return { ok: false, error: '[en] En passant target square is not empty [tr] En passant hedef karesi boş değil' };
@@ -4911,7 +5045,7 @@ function parseUserFenInput(fenStr, level) {
     
   }
 
-  return { ok: true, state: { s, t, e, o, n }, isStart, warnings };
+  return { ok: true, state: { s, t, e, o, n }, isStart, warnings, c960Info };
 }
 
 function isAttackedByLite(s, sq, byWhite) {
@@ -5520,8 +5654,16 @@ function generate() {
     
     
     if (c960IsEnabled()) {
-      const idn = c960CurrentIdn();
-      const pos8 = c960Position(idn);
+      let pos8;
+      
+      
+      
+      if (fenStateLocal && fenStateLocal.c960Info && fenStateLocal.c960Info.pos8) {
+        pos8 = fenStateLocal.c960Info.pos8;
+      } else {
+        const idn = c960CurrentIdn();
+        pos8 = c960Position(idn);
+      }
       try {
         normalHtml = injectC960(normalHtml, pos8);
       } catch (err) {
