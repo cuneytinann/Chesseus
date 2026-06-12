@@ -4531,12 +4531,12 @@ function injectC960(html, pos8) {
     const ksParts = [`o&4>>${varName}*2`];
     if (ksEmptyStr) ksParts.push(ksEmptyStr);
     if (ksSafeStr)  ksParts.push(ksSafeStr);
-    ksParts.push(`m.push(6+r)`);
+    ksParts.push(`m.push(${bRk}+r)`);
     
     const qsParts = [`o&8>>${varName}*2`];
     if (qsEmptyStr) qsParts.push(qsEmptyStr);
     if (qsSafeStr)  qsParts.push(qsSafeStr);
-    qsParts.push(`m.push(2+r)`);
+    qsParts.push(`m.push(${bRq}+r)`);
     
     return `if(P=='K'&!J(${varName}))r=${varName}*56,${ksParts.join('&&')},${qsParts.join('&&')}`;
   }
@@ -4550,8 +4550,8 @@ function injectC960(html, pos8) {
   function buildPatchB() {
     return (
       `if(P=='K'){` +
-      `T==6+j?(s[${bRk}+j]=_,s[5+j]='rR'[+${varName}],s[6+j]='kK'[+${varName}]):` +
-      `T==2+j&&(s[${bRq}+j]=_,s[3+j]='rR'[+${varName}],s[2+j]='kK'[+${varName}]);` +
+      `T==${bRk}+j?(s[${bK}+j]=_,s[${bRk}+j]=_,s[6+j]='kK'[+${varName}],s[5+j]='rR'[+${varName}]):` +
+      `T==${bRq}+j&&(s[${bK}+j]=_,s[${bRq}+j]=_,s[2+j]='kK'[+${varName}],s[3+j]='rR'[+${varName}]);` +
       `o&=${varName}?~3:~12}`
     );
   }
@@ -4559,6 +4559,16 @@ function injectC960(html, pos8) {
   const reOldB = /if\(P=='K'\)X-x>1\?\(s\[j\+5\]=s\[j\+7\],s\[j\+7\]=_\):x-X>1&&\(s\[j\+3\]=s\[j\],s\[j\]=_\),o&=[bW]\?~3:~12/;
   if (reOldB.test(html)) {
     html = html.replace(reOldB, buildPatchB());
+  }
+  
+  
+  // Patch D: 50 hamle sayacı FIDE düzeltmesi.
+  // Klasik motorda n=...|s[T]>_?0:... rok sırasında tıklanan kendi kalesini
+  // "taş alımı" sayıp sayacı sıfırlar. FIDE'ye göre rok sayacı sıfırlamaz.
+  // Rok, şahın hedef karesine ulaşmasıyla tanınır (6+j şah kanadı, 2+j vezir kanadı).
+  const reN = /n=P=='P'\|s\[T\]>_\?0:n\+1/;
+  if (reN.test(html)) {
+    html = html.replace(reN, `n=P=='P'|s[T]>_&!(P=='K'&(T==${bRk}+j|T==${bRq}+j))?0:n+1`);
   }
   
   
