@@ -2299,13 +2299,14 @@ select[data-orig-lang-id] { display: none !important; }
       <span class="lang-tr">Tekrar sayısı:</span>
     </span>
     <select id="optRepCount" style="font-family:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);color:var(--ink)">
-      <option value="0" data-en="0 — default"               data-tr="0 — varsayılan">0 — default</option>
-      <option value="1" data-en="1 — seen once before"      data-tr="1 — önceden 1 kez">1 — seen once before</option>
-      <option value="2" data-en="2 — one more visit = draw" data-tr="2 — 1 daha → berabere">2 — one more visit = draw</option>
+      <option value="0" data-en="With this, 1" data-tr="Bununla beraber 1">Bununla beraber 1</option>
+      <option value="1" data-en="With this, 2" data-tr="Bununla beraber 2">Bununla beraber 2</option>
+      <option value="2" data-en="With this, 3" data-tr="Bununla beraber 3">Bununla beraber 3</option>
+      <option value="3" data-en="With this, 4" data-tr="Bununla beraber 4">Bununla beraber 4</option>
     </select>
     <span style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
-      <span class="lang-en">How many times has this position already occurred?</span>
-      <span class="lang-tr">Bu pozisyon önceden kaç kez oluştu?</span>
+      <span class="lang-en">Total occurrences of this position (including now).</span>
+      <span class="lang-tr">Bu pozisyonun toplam görülme sayısı (şu an dahil).</span>
     </span>
   </label>
   <label id="uneqRow" style="display:flex;align-items:center;gap:8px;margin:8px 0 0">
@@ -3867,8 +3868,11 @@ function getName() {
     ? Math.max(0, Math.min(99, parseInt(halfmoveInputEl.value, 10) || 0))
     : 0;
   const repCountEl = document.getElementById('optRepCount');
-  const repCount = (level === 'L4' && repCountEl)
-    ? Math.max(0, Math.min(2, parseInt(repCountEl.value, 10) || 0))
+  const repActive = (level === 'L4' || level === 'L5');
+  const repMax = (level === 'L5') ? 3 : 2;
+  const repMin = (level === 'L5') ? 0 : 1;
+  const repCount = (repActive && repCountEl)
+    ? Math.max(repMin, Math.min(repMax, parseInt(repCountEl.value, 10) || repMin))
     : 0;
   const fenTag = (fenCustom || uneqActive || halfmoveInput > 0 || repCount > 0) ? '_FEN' : '';
 
@@ -4403,9 +4407,30 @@ function generate() {
   const repCountRow = document.getElementById('repCountRow');
   const repCountEl  = document.getElementById('optRepCount');
   if (repCountRow) {
-    const repActive = (level === 'L4');
+    const repActive = (level === 'L4' || level === 'L5');
     repCountRow.style.display = repActive ? '' : 'none';
-    if (repCountEl && !repActive) repCountEl.value = '0';
+    if (repCountEl) {
+      
+      
+      const opts = repCountEl.querySelectorAll('option');
+      if (level === 'L4') {
+        
+        opts.forEach(o => {
+          const v = o.value;
+          o.hidden = (v === '0' || v === '3');
+          o.disabled = o.hidden;
+        });
+        
+        if (repCountEl.value === '0' || repCountEl.value === '3') repCountEl.value = '1';
+      } else if (level === 'L5') {
+        
+        opts.forEach(o => { o.hidden = false; o.disabled = false; });
+      } else {
+        
+        opts.forEach(o => { o.hidden = false; o.disabled = false; });
+        repCountEl.value = '0';
+      }
+    }
   }
 
   const halfmoveRow = document.getElementById('halfmoveRow');
@@ -4474,7 +4499,12 @@ function generate() {
   const fnameEl = document.getElementById('fname');
   const bytesEl = document.getElementById('bytes');
 
-  const repCount = repCountEl ? Math.max(0, Math.min(2, parseInt(repCountEl.value, 10) || 0)) : 0;
+  const repActiveLocal = (level === 'L4' || level === 'L5');
+  const repMaxLocal = (level === 'L5') ? 3 : 2;
+  const repMinLocal = (level === 'L5') ? 0 : 1;
+  const repCount = (repActiveLocal && repCountEl)
+    ? Math.max(repMinLocal, Math.min(repMaxLocal, parseInt(repCountEl.value, 10) || repMinLocal))
+    : 0;
   const halfmoveInput = (clockOn && halfmoveEl)
     ? Math.max(0, Math.min(99, parseInt(halfmoveEl.value, 10) || 0))
     : 0;
