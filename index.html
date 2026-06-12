@@ -2233,6 +2233,17 @@ select[data-orig-lang-id] { display: none !important; }
       <span class="lang-tr">DOM (tıklamalı tahta)</span>
     </label>
   </div>
+  <label style="display:flex;align-items:center;gap:8px;margin:6px 0 0;flex-wrap:wrap;cursor:pointer">
+    <input type="checkbox" id="optFlip" checked>
+    <span style="font-size:12px">
+      <span class="lang-en">Board flip — auto-rotate every move</span>
+      <span class="lang-tr">Tahta döndürme — her hamlede çevir</span>
+    </span>
+    <span style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
+      <span class="lang-en">When off, the board never flips (saves bytes).</span>
+      <span class="lang-tr">Kapatılırsa tahta hiç dönmez (bayt tasarrufu).</span>
+    </span>
+  </label>
   <hr>
   <strong>
     <span class="lang-en">Display:</span>
@@ -2355,6 +2366,13 @@ select[data-orig-lang-id] { display: none !important; }
 </div>
 
 <pre id="output" class="output" data-placeholder="Generated code will appear here..."></pre>
+
+<div style="display:flex;justify-content:flex-end;margin-top:8px">
+  <button id="btnReset" type="button" style="font-size:11px;padding:4px 10px;background:transparent;border:1px solid var(--rule);color:var(--muted);border-radius:3px;cursor:pointer">
+    <span class="lang-en">↺ Reset to defaults</span>
+    <span class="lang-tr">↺ Varsayılana döndür</span>
+  </button>
+</div>
 
 </div>
 </section>
@@ -3815,9 +3833,11 @@ function showClockUI(level) {
 }
 
 function getUI() {
+  const flipEl = document.getElementById('optFlip');
   return {
     show: document.getElementById('optShow').value,   
     incEnabled: document.getElementById('optIncEnable').checked,
+    flip: flipEl ? flipEl.checked : true,             
   };
 }
 
@@ -3896,7 +3916,9 @@ function getName() {
     }
   }
 
-  return prefix + level + showSuffix + fenTag + timeTag + incTag;
+  const flipTag = ui.flip ? '' : '_noFlip';
+
+  return prefix + level + showSuffix + fenTag + timeTag + incTag + flipTag;
 }
 
 function fenMsg(s) {
@@ -4563,6 +4585,28 @@ function generate() {
     return html;
   }
 
+  function injectFlipRemoval(html) {
+    
+    
+    
+    
+    
+    if (ui2.flip) return html;
+    
+    
+    
+    
+    html = html.replace(/s\[([a-zA-Z_$][\w$]*)\^!t\*63\]/g, 's[$1]');
+    
+    
+    
+    html = html.replace(/(\.outline\s*=\s*[a-zA-Z_$][\w$]*)\^!t\*63(?=\^)/g, '$1');
+    
+    
+    html = html.replace(/[a-zA-Z_$][\w$]*\s*\^=\s*!t\*63\s*;?/g, '');
+    return html;
+  }
+
   function effectiveInjectState() {
     if (fenStateLocal && !fenStateLocal.isStart) return fenStateLocal.state;
     if (halfmoveInput > 0 || repCount > 0) {
@@ -4591,6 +4635,7 @@ function generate() {
     if (stateForInject) {
       normalHtml = injectFenIntoSourceNormal(normalHtml, stateForInject, repCount, level);
     }
+    normalHtml = injectFlipRemoval(normalHtml);
 
     lastSaf = normalHtml;
     safEl.textContent = normalHtml;
@@ -4706,6 +4751,47 @@ document.getElementById('btnDownload').addEventListener('click', downloadFile);
 document.getElementById('btnCopy').addEventListener('click', copyToClipboard);
 document.getElementById('btnDownloadPacked').addEventListener('click', downloadPacked);
 
+const btnResetEl = document.getElementById('btnReset');
+if (btnResetEl) {
+  btnResetEl.addEventListener('click', () => {
+    
+    const setRadio = (name, value) => {
+      const el = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+      if (el) el.checked = true;
+    };
+    const setVal = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    };
+    const setChecked = (id, checked) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = checked;
+    };
+
+    setRadio('optLevel', 'L5');
+    setRadio('optRender', 'dom');
+    setChecked('optFlip', true);
+    setVal('optShow', 'A');
+    setVal('optFen', '');
+    setVal('optRepCount', '0');
+    setVal('optHalfmove', '0');
+    setVal('optBase', '600');
+    setVal('optInc', '5');
+    setChecked('optIncEnable', true);
+    setVal('optBaseW', '600');
+    setVal('optBaseB', '600');
+    setChecked('optUneqEnable', false);
+    setVal('optDisplay', 'normal');
+
+    
+    const fenStatusEl = document.getElementById('fenStatus');
+    if (fenStatusEl) fenStatusEl.textContent = '';
+    window.__fenState = null;
+
+    generate();
+  });
+}
+
 document.querySelectorAll('input[name="optLevel"]').forEach(el => {
   el.addEventListener('change', generate);
 });
@@ -4715,6 +4801,9 @@ document.querySelectorAll('input[name="optRender"]').forEach(el => {
 document.getElementById('optShow').addEventListener('change', generate);
 document.getElementById('optShow').addEventListener('input', generate);
 document.getElementById('optDisplay').addEventListener('change', generate);
+
+const optFlipEl = document.getElementById('optFlip');
+if (optFlipEl) optFlipEl.addEventListener('change', generate);
 
 document.getElementById('optIncEnable').addEventListener('change', () => {
   const baseEl = document.getElementById('optBase');
